@@ -3,6 +3,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { CourseEntity } from "../domain/course.entity";
 import { EnrollmentEntity } from "../domain/enrollment.entity";
+import { CourseGradePolicyEntity } from "../domain/course-grade-policy.entity";
 import { CreateCourseDto } from "../dto/create-course.dto";
 import { UpdateCourseDto } from "../dto/update-course.dto";
 import { PaginatedResult } from "../../../common/dto/pagination.dto";
@@ -13,7 +14,9 @@ export class CoursesService {
     @InjectRepository(CourseEntity)
     private readonly coursesRepo: Repository<CourseEntity>,
     @InjectRepository(EnrollmentEntity)
-    private readonly enrollmentsRepo: Repository<EnrollmentEntity>
+    private readonly enrollmentsRepo: Repository<EnrollmentEntity>,
+    @InjectRepository(CourseGradePolicyEntity)
+    private readonly gradePolicyRepo: Repository<CourseGradePolicyEntity>
   ) {}
 
   async list(offset = 0, limit = 20): Promise<PaginatedResult<CourseEntity>> {
@@ -86,7 +89,10 @@ export class CoursesService {
     return enrollment;
   }
 
-  async listEnrollments(courseId: string, offset = 0, limit = 20) {
+  async listEnrollments(courseId: string, actor: { id: string; role: string }, offset = 0, limit = 20) {
+    const course = await this.coursesRepo.findOne({ where: { id: courseId } });
+    if (!course) throw new NotFoundException("Course not found");
+    if (actor.role !== "admin" && course.lecturerId !== actor.id) throw new ForbiddenException();
     const [items, total] = await this.enrollmentsRepo.findAndCount({
       where: { courseId },
       skip: offset,
@@ -94,5 +100,26 @@ export class CoursesService {
       order: { enrolledAt: "DESC" }
     });
     return { items, total, offset, limit };
+  }
+
+  async getGradePolicy(courseId: string) {
+    return this.gradePolicyRepo.findOne({ where: { courseId } });
+  }
+
+  async upsertGradePolicy(courseId: string, actor: { id: string; role: string }, policy: { latePenaltyPercent: number; allowResubmission: boolean; maxAttempts: number }) {
+    const course = await this.coursesRepo.findOne({ where: { id: courseId } });
+    if (!course) throw new NotFoundException("Course not found");
+    if (actor.role !== "admin" && course.lecturerId !== actor.id) throw new ForbiddenException();
+
+    const existing = await this.gradePolicyRepo.findOne({ where: { courseId } });
+    if (existing) {
+      existing.latePenaltyPercent = policy.latePenaltyPercent;
+      existing.allowResubmission = policy.allowResubmission;
+      existing.maxAttempts = policy.maxAttempts;
+      return this.gradePolicyRepo.save(existing);
+    }
+
+    const created = this.gradePolicyRepo.create({ courseId, ...policy });
+    return this.gradePolicyRepo.save(created);
   }
 }

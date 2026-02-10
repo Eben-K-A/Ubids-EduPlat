@@ -19,7 +19,21 @@ const envSchema = z.object({
   S3_ENDPOINT: z.string().optional(),
   S3_SIGNED_URL_TTL: z.coerce.number().default(900),
   AI_SERVICE_URL: z.string().optional(),
-  AI_SERVICE_KEY: z.string().optional()
+  AI_SERVICE_KEY: z.string().optional(),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().default(10000),
+  AI_CIRCUIT_FAILURE_THRESHOLD: z.coerce.number().default(5),
+  AI_CIRCUIT_OPEN_SECONDS: z.coerce.number().default(60),
+  AI_DAILY_QUOTA: z.coerce.number().default(1000),
+  AI_DEFAULT_PROVIDER: z.enum(["openai", "deepseek", "huggingface"]).default("openai"),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().default("https://api.openai.com/v1"),
+  OPENAI_MODEL: z.string().default("gpt-4o-mini"),
+  DEEPSEEK_API_KEY: z.string().optional(),
+  DEEPSEEK_BASE_URL: z.string().default("https://api.deepseek.com"),
+  DEEPSEEK_MODEL: z.string().default("deepseek-chat"),
+  HUGGINGFACE_API_KEY: z.string().optional(),
+  HUGGINGFACE_BASE_URL: z.string().default("https://api-inference.huggingface.co"),
+  HUGGINGFACE_MODEL: z.string().default("meta-llama/Meta-Llama-3-8B-Instruct")
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;
@@ -62,7 +76,29 @@ export const configuration = () => {
     },
     ai: {
       url: env.AI_SERVICE_URL,
-      key: env.AI_SERVICE_KEY
+      key: env.AI_SERVICE_KEY,
+      timeoutMs: env.AI_REQUEST_TIMEOUT_MS,
+      circuitFailureThreshold: env.AI_CIRCUIT_FAILURE_THRESHOLD,
+      circuitOpenSeconds: env.AI_CIRCUIT_OPEN_SECONDS,
+      dailyQuota: env.AI_DAILY_QUOTA,
+      defaultProvider: env.AI_DEFAULT_PROVIDER,
+      providers: {
+        openai: {
+          apiKey: env.OPENAI_API_KEY,
+          baseUrl: env.OPENAI_BASE_URL,
+          model: env.OPENAI_MODEL
+        },
+        deepseek: {
+          apiKey: env.DEEPSEEK_API_KEY,
+          baseUrl: env.DEEPSEEK_BASE_URL,
+          model: env.DEEPSEEK_MODEL
+        },
+        huggingface: {
+          apiKey: env.HUGGINGFACE_API_KEY,
+          baseUrl: env.HUGGINGFACE_BASE_URL,
+          model: env.HUGGINGFACE_MODEL
+        }
+      }
     }
   };
 };

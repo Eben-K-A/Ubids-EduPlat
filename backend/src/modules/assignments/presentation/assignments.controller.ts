@@ -63,8 +63,9 @@ export class AssignmentsController {
 
   @Get(":id/submissions")
   @Roles("lecturer", "admin")
-  listSubmissions(@Param("id") id: string, @Query() query: PaginationQueryDto) {
-    return this.assignmentsService.listSubmissions(id, query.offset, query.limit);
+  listSubmissions(@Param("id") id: string, @Query() query: PaginationQueryDto, @Req() req: Request) {
+    const user = req.user as { id: string; role: string };
+    return this.assignmentsService.listSubmissions(id, query.offset, query.limit, user);
   }
 
   @Post(":id/submissions/:submissionId/grade")

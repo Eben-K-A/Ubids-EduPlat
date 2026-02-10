@@ -9,6 +9,7 @@ import { UpdateAssignmentDto } from "../dto/update-assignment.dto";
 import { GradeSubmissionDto } from "../dto/grade-submission.dto";
 import { PaginatedResult } from "../../../common/dto/pagination.dto";
 import { CourseEntity } from "../../courses/domain/course.entity";
+import { CourseGradePolicyEntity } from "../../courses/domain/course-grade-policy.entity";
 
 @Injectable()
 export class AssignmentsService {
@@ -18,7 +19,9 @@ export class AssignmentsService {
     @InjectRepository(SubmissionEntity)
     private readonly submissionsRepo: Repository<SubmissionEntity>,
     @InjectRepository(CourseEntity)
-    private readonly coursesRepo: Repository<CourseEntity>
+    private readonly coursesRepo: Repository<CourseEntity>,
+    @InjectRepository(CourseGradePolicyEntity)
+    private readonly gradePolicyRepo: Repository<CourseGradePolicyEntity>
   ) {}
 
   async list(offset = 0, limit = 20): Promise<PaginatedResult<AssignmentEntity>> {
@@ -92,21 +95,37 @@ export class AssignmentsService {
     const assignment = await this.assignmentsRepo.findOne({ where: { id: assignmentId } });
     if (!assignment) throw new NotFoundException("Assignment not found");
 
-    const existing = await this.submissionsRepo.findOne({
-      where: { assignmentId, studentId }
-    });
-    if (existing) return existing;
+    const policy = await this.gradePolicyRepo.findOne({ where: { courseId: assignment.courseId } });
+    const attempts = await this.submissionsRepo.count({ where: { assignmentId, studentId } });
+    if (policy) {
+      if (!policy.allowResubmission && attempts > 0) return await this.latestSubmission(assignmentId, studentId);
+      if (attempts >= policy.maxAttempts) return await this.latestSubmission(assignmentId, studentId);
+    } else if (attempts > 0) {
+      return await this.latestSubmission(assignmentId, studentId);
+    }
 
     const submission = this.submissionsRepo.create({
       assignmentId,
       studentId,
       content: dto.content,
-      fileUrl: dto.fileUrl
+      fileUrl: dto.fileUrl,
+      attemptNumber: attempts + 1,
+      status: "submitted",
+      submittedAt: new Date()
     });
     return this.submissionsRepo.save(submission);
   }
 
-  async listSubmissions(assignmentId: string, offset = 0, limit = 20) {
+  async listSubmissions(assignmentId: string, offset = 0, limit = 20, actor?: { id: string; role: string }) {
+    const assignment = await this.assignmentsRepo.findOne({ where: { id: assignmentId } });
+    if (!assignment) throw new NotFoundException("Assignment not found");
+    if (actor) {
+      const course = await this.coursesRepo.findOne({ where: { id: assignment.courseId } });
+      if (!course) throw new NotFoundException("Course not found");
+      if (actor.role !== "admin" && course.lecturerId !== actor.id) {
+        throw new NotFoundException("Assignment not found");
+      }
+    }
     const [items, total] = await this.submissionsRepo.findAndCount({
       where: { assignmentId },
       skip: offset,
@@ -114,6 +133,13 @@ export class AssignmentsService {
       order: { createdAt: "DESC" }
     });
     return { items, total, offset, limit };
+  }
+
+  private async latestSubmission(assignmentId: string, studentId: string) {
+    return this.submissionsRepo.findOne({
+      where: { assignmentId, studentId },
+      order: { createdAt: "DESC" }
+    });
   }
 
   async gradeSubmission(assignmentId: string, submissionId: string, actor: { id: string; role: string }, dto: GradeSubmissionDto) {
@@ -126,8 +152,18 @@ export class AssignmentsService {
     }
     const submission = await this.submissionsRepo.findOne({ where: { id: submissionId, assignmentId } });
     if (!submission) throw new NotFoundException("Submission not found");
-    submission.grade = dto.grade;
+    const policy = await this.gradePolicyRepo.findOne({ where: { courseId: assignment.courseId } });
+    const raw = dto.grade;
+    let finalGrade = raw;
+    if (policy && submission.submittedAt && assignment.dueDate && submission.submittedAt > assignment.dueDate) {
+      const penalty = Math.max(0, Math.min(100, policy.latePenaltyPercent));
+      finalGrade = Math.max(0, Math.round(raw - (raw * penalty) / 100));
+    }
+    submission.rawGrade = raw;
+    submission.grade = finalGrade;
     submission.feedback = dto.feedback ?? submission.feedback ?? null;
+    submission.status = "graded";
+    submission.gradedAt = new Date();
     return this.submissionsRepo.save(submission);
   }
 }

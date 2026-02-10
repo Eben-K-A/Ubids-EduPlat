@@ -1,4 +1,4 @@
-import { IsInt, IsString, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Min } from "class-validator";
 
 export class PresignUploadDto {
   @IsString()
@@ -10,4 +10,8 @@ export class PresignUploadDto {
   @IsInt()
   @Min(1)
   size!: number;
+
+  @IsOptional()
+  @IsString()
+  checksum?: string;
 }

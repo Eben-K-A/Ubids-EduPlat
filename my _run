@@ -1,0 +1,13 @@
+nvm use 20
+
+./start-livekit.sh
+
+cd /home/nezer/Software\ Project/UBIDS\ EduPlat/backend-simple
+npm run dev
+
+cd /home/nezer/Software\ Project/UBIDS\ EduPlat
+npm run dev
+
+cd /home/nezer/Software\ Project/UBIDS\ EduPlat
+caddy run --config Caddyfile
+

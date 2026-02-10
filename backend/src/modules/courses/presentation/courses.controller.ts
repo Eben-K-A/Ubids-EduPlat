@@ -4,6 +4,7 @@ import { CoursesService } from "../application/courses.service";
 import { PaginationQueryDto } from "../../../common/dto/pagination.dto";
 import { CreateCourseDto } from "../dto/create-course.dto";
 import { UpdateCourseDto } from "../dto/update-course.dto";
+import { GradePolicyDto } from "../dto/grade-policy.dto";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../../../common/guards/roles.guard";
 import { Roles } from "../../../common/decorators/roles.decorator";
@@ -72,7 +73,21 @@ export class CoursesController {
 
   @Get(":id/enrollments")
   @Roles("lecturer", "admin")
-  enrollments(@Param("id") id: string, @Query() query: PaginationQueryDto) {
-    return this.coursesService.listEnrollments(id, query.offset, query.limit);
+  enrollments(@Param("id") id: string, @Query() query: PaginationQueryDto, @Req() req: Request) {
+    const user = req.user as { id: string; role: string };
+    return this.coursesService.listEnrollments(id, user, query.offset, query.limit);
+  }
+
+  @Get(":id/grade-policy")
+  @Roles("lecturer", "admin")
+  getPolicy(@Param("id") id: string) {
+    return this.coursesService.getGradePolicy(id);
+  }
+
+  @Post(":id/grade-policy")
+  @Roles("lecturer", "admin")
+  setPolicy(@Param("id") id: string, @Body() dto: GradePolicyDto, @Req() req: Request) {
+    const user = req.user as { id: string; role: string };
+    return this.coursesService.upsertGradePolicy(id, user, dto);
   }
 }

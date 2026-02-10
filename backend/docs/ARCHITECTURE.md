@@ -34,7 +34,9 @@
 - PostgreSQL read replicas and future sharding
 - Redis for cache, rate limiting, job queues
 - WebSocket gateways scale horizontally with Redis adapter
- - File storage supports local or S3 with signed URLs and scan hooks
+- File storage supports local or S3 with signed URLs and scan hooks
+- Prometheus-compatible metrics exposed at `/api/v1/metrics`
+ - AI provider router supports OpenAI/DeepSeek/Hugging Face via HTTP adapters
 
 ## Extensibility
 - Each module can be extracted into its own service.

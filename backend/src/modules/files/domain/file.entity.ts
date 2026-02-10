@@ -21,6 +21,9 @@ export class FileEntity {
   @Column({ type: "bigint" })
   size!: number;
 
+  @Column({ type: "varchar", length: 128, nullable: true })
+  checksum?: string | null;
+
   @CreateDateColumn({ type: "timestamptz" })
   createdAt!: Date;
 }

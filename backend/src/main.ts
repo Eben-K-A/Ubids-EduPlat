@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import "./observability/otel";
 import { NestFactory } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
@@ -8,6 +9,7 @@ import { RequestIdMiddleware } from "./common/middleware/request-id.middleware";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
 import { AppLogger } from "./common/logger";
+import { metricsMiddleware } from "./common/middleware/metrics.middleware";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -17,6 +19,7 @@ async function bootstrap() {
   app.enableShutdownHooks();
   app.use(helmet());
   app.use(new RequestIdMiddleware().use);
+  app.use(metricsMiddleware);
   app.enableCors({ origin: true, credentials: true });
 
   app.setGlobalPrefix("api/v1");

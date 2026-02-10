@@ -6,13 +6,18 @@ import { FilesService } from "../application/files.service";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../../../common/guards/roles.guard";
 import { PresignUploadDto } from "../dto/presign-upload.dto";
+import { MultipartCompleteDto, MultipartInitDto, MultipartPartDto } from "../dto/multipart.dto";
+import { MultipartService } from "../application/multipart.service";
 
 @ApiTags("files")
 @ApiBearerAuth()
 @Controller("files")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class FilesController {
-  constructor(private readonly filesService: FilesService) {}
+  constructor(
+    private readonly filesService: FilesService,
+    private readonly multipartService: MultipartService
+  ) {}
 
   @Post("upload")
   @ApiConsumes("multipart/form-data")
@@ -25,17 +30,50 @@ export class FilesController {
   @Post("presign")
   async presign(@Body() body: PresignUploadDto, @Req() req: any) {
     const user = req.user as { id: string };
-    return this.filesService.getSignedUploadUrl(user.id, body.filename, body.mimeType, body.size);
+    return this.filesService.getSignedUploadUrl(user.id, body.filename, body.mimeType, body.size, body.checksum);
+  }
+
+  @Post("multipart/initiate")
+  async initiateMultipart(@Body() body: MultipartInitDto, @Req() req: any) {
+    const user = req.user as { id: string };
+    const storageKey = `${user.id}/${Date.now()}-${body.filename}`;
+    return this.multipartService.initiate(user.id, storageKey, body.mimeType);
+  }
+
+  @Post("multipart/:uploadId/part")
+  async getPartUrl(
+    @Param("uploadId") uploadId: string,
+    @Body() body: MultipartPartDto,
+    @Req() req: any
+  ) {
+    const user = req.user as { id: string };
+    const { storageKey } = req.query as { storageKey: string };
+    const url = await this.multipartService.getPartUrl(user.id, uploadId, storageKey, body.partNumber);
+    return { url };
+  }
+
+  @Post("multipart/:uploadId/complete")
+  async completeMultipart(
+    @Param("uploadId") uploadId: string,
+    @Body() body: MultipartCompleteDto,
+    @Req() req: any
+  ) {
+    const user = req.user as { id: string };
+    const { storageKey } = req.query as { storageKey: string };
+    await this.multipartService.complete(user.id, uploadId, storageKey, body.parts);
+    return this.filesService.finalizeMultipart(user.id, storageKey, body.filename, body.mimeType, body.size, body.checksum);
   }
 
   @Get(":id/signed")
-  async signed(@Param("id") id: string) {
-    return this.filesService.getSignedDownloadUrl(id);
+  async signed(@Param("id") id: string, @Req() req: any) {
+    const user = req.user as { id: string; role: string };
+    return this.filesService.getSignedDownloadUrl(id, user);
   }
 
   @Get(":id")
-  async download(@Param("id") id: string, @Res() res: Response) {
-    const result = await this.filesService.download(id);
+  async download(@Param("id") id: string, @Req() req: any, @Res() res: Response) {
+    const user = req.user as { id: string; role: string };
+    const result = await this.filesService.download(id, user);
     if (!result) {
       return res.status(404).end();
     }

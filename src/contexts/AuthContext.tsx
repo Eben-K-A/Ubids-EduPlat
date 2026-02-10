@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import type { User, AuthState, LoginCredentials, RegisterData, UserRole } from "@/types/auth";
+import { authApi, ApiError } from "@/services/api";
 
 interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
@@ -9,45 +10,9 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock user storage (will be replaced with real backend later)
 const STORAGE_KEY = "edu_platform_user";
-
-// Mock users for demo
-const mockUsers: Record<string, { password: string; user: User }> = {
-  "lecturer@edu.com": {
-    password: "password123",
-    user: {
-      id: "1",
-      email: "lecturer@edu.com",
-      firstName: "John",
-      lastName: "Smith",
-      role: "lecturer" as UserRole,
-      createdAt: new Date(),
-    },
-  },
-  "student@edu.com": {
-    password: "password123",
-    user: {
-      id: "2",
-      email: "student@edu.com",
-      firstName: "Jane",
-      lastName: "Doe",
-      role: "student" as UserRole,
-      createdAt: new Date(),
-    },
-  },
-  "admin@edu.com": {
-    password: "password123",
-    user: {
-      id: "3",
-      email: "admin@edu.com",
-      firstName: "Admin",
-      lastName: "User",
-      role: "admin" as UserRole,
-      createdAt: new Date(),
-    },
-  },
-};
+const TOKEN_KEY = "access_token";
+const REFRESH_TOKEN_KEY = "refresh_token";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -59,12 +24,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Check for existing session on mount
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (stored && token) {
       try {
         const user = JSON.parse(stored) as User;
         setState({ user, isAuthenticated: true, isLoading: false });
       } catch {
         localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_TOKEN_KEY);
         setState({ user: null, isAuthenticated: false, isLoading: false });
       }
     } else {
@@ -73,46 +41,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (credentials: LoginCredentials): Promise<void> => {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      const response = await authApi.login(credentials.email, credentials.password);
 
-    const mockUser = mockUsers[credentials.email.toLowerCase()];
-    if (!mockUser || mockUser.password !== credentials.password) {
-      throw new Error("Invalid email or password");
+      // Store tokens and user
+      localStorage.setItem(TOKEN_KEY, response.access_token);
+      localStorage.setItem(REFRESH_TOKEN_KEY, response.refresh_token);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));
+
+      setState({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+      if (error instanceof ApiError) {
+        throw new Error(error.message);
+      }
+      throw error;
     }
-
-    const user = mockUser.user;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    setState({ user, isAuthenticated: true, isLoading: false });
   }, []);
 
   const register = useCallback(async (data: RegisterData): Promise<void> => {
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    try {
+      setState((prev) => ({ ...prev, isLoading: true }));
+      const response = await authApi.register({
+        email: data.email,
+        password: data.password,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: data.role,
+      });
 
-    if (mockUsers[data.email.toLowerCase()]) {
-      throw new Error("Email already registered");
+      // Store tokens and user
+      localStorage.setItem(TOKEN_KEY, response.access_token);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(response.user));
+
+      setState({
+        user: response.user,
+        isAuthenticated: true,
+        isLoading: false,
+      });
+    } catch (error) {
+      setState((prev) => ({ ...prev, isLoading: false }));
+      if (error instanceof ApiError) {
+        throw new Error(error.message);
+      }
+      throw error;
     }
-
-    const user: User = {
-      id: crypto.randomUUID(),
-      email: data.email,
-      firstName: data.firstName,
-      lastName: data.lastName,
-      role: data.role,
-      createdAt: new Date(),
-    };
-
-    // Store in mock users (won't persist across refreshes)
-    mockUsers[data.email.toLowerCase()] = { password: data.password, user };
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    setState({ user, isAuthenticated: true, isLoading: false });
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-    setState({ user: null, isAuthenticated: false, isLoading: false });
+  const logout = useCallback(async () => {
+    try {
+      // Call logout endpoint
+      await authApi.logout();
+    } catch {
+      // Continue logout even if API call fails
+    } finally {
+      // Clear local storage
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_TOKEN_KEY);
+      setState({ user: null, isAuthenticated: false, isLoading: false });
+    }
   }, []);
 
   return (

@@ -29,6 +29,23 @@ npm run start:dev
 ## File Storage
 Set `FILE_STORAGE_DRIVER` to `local` or `s3`. When using `s3`, configure bucket and credentials in `.env`.
 
+## Observability
+OTLP traces are enabled when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+
+## AI Providers
+Supported providers: OpenAI, DeepSeek, Hugging Face.
+Set `AI_DEFAULT_PROVIDER` and provider keys in `.env`.
+
+## Tests
+- Unit: `npm run test`
+- E2E: `npm run test:e2e`
+- Load (k6): `k6 run test/load/k6-smoke.js`
+
+## Kubernetes
+Manifests are in `backend/deploy/k8s`.
+Apply in order: `namespace.yaml`, `configmap.yaml`, `secret.yaml`, `deployment.yaml`, `service.yaml`, `hpa.yaml`, `ingress.yaml`.
+Monitoring: `monitoring-prometheus.yaml`, `monitoring-grafana.yaml`, `alert-rules.yaml`, `grafana-datasource.yaml`, `grafana-dashboard-provisioning.yaml`, `grafana-dashboard-cm.yaml`.
+
 ## Key Modules
 - Auth + Users
 - Courses

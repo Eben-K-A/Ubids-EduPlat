@@ -7,6 +7,8 @@ import { LocalStorageService } from "./application/local-storage.service";
 import { S3StorageService } from "./application/s3-storage.service";
 import { ConfigService } from "@nestjs/config";
 import { NoopVirusScanService } from "./application/noop-virus-scan.service";
+import { ClamAvVirusScanService } from "./application/clamav-virus-scan.service";
+import { MultipartService } from "./application/multipart.service";
 
 @Module({
   imports: [TypeOrmModule.forFeature([FileEntity])],
@@ -15,6 +17,8 @@ import { NoopVirusScanService } from "./application/noop-virus-scan.service";
     LocalStorageService,
     S3StorageService,
     NoopVirusScanService,
+    ClamAvVirusScanService,
+    MultipartService,
     {
       provide: "StorageService",
       inject: [ConfigService, LocalStorageService, S3StorageService],
@@ -25,7 +29,10 @@ import { NoopVirusScanService } from "./application/noop-virus-scan.service";
     },
     {
       provide: "VirusScanService",
-      useExisting: NoopVirusScanService
+      inject: [ClamAvVirusScanService, NoopVirusScanService],
+      useFactory: (clam: ClamAvVirusScanService, noop: NoopVirusScanService) => {
+        return process.env.CLAMAV_HOST ? clam : noop;
+      }
     }
   ],
   controllers: [FilesController]

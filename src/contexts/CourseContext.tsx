@@ -1,11 +1,19 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, ReactNode } from "react";
 import { Course, Enrollment, CourseWithEnrollment } from "@/types/course";
 import { useAuth } from "./AuthContext";
+import {
+  useCourses as useCoursesQuery,
+  useCreateCourse,
+  useUpdateCourse,
+  useDeleteCourse,
+  useEnrollCourse,
+} from "@/hooks/useApi";
 
 interface CourseContextType {
-  courses: Course[];
+  courses: Course[] | undefined;
   enrollments: Enrollment[];
   isLoading: boolean;
+  error: Error | null;
   createCourse: (course: Omit<Course, "id" | "createdAt" | "updatedAt" | "lecturerId" | "lecturerName" | "enrolledCount">) => Promise<Course>;
   updateCourse: (id: string, updates: Partial<Course>) => Promise<Course>;
   deleteCourse: (id: string) => Promise<void>;
@@ -18,195 +26,54 @@ interface CourseContextType {
 
 const CourseContext = createContext<CourseContextType | undefined>(undefined);
 
-// Mock data
-const mockCourses: Course[] = [
-  {
-    id: "course-1",
-    title: "Introduction to Computer Science",
-    description: "Learn the fundamentals of computer science, including algorithms, data structures, and programming concepts.",
-    code: "CS101",
-    lecturerId: "lecturer-1",
-    lecturerName: "Prof. John Lecturer",
-    enrolledCount: 45,
-    maxEnrollment: 60,
-    status: "published",
-    facultyId: "fac-1",
-    departmentId: "dept-1",
-    programId: "prog-1",
-    levelValue: 100,
-    academicPeriodId: "ap-2",
-    createdAt: new Date("2024-01-15"),
-    updatedAt: new Date("2024-01-15"),
-  },
-  {
-    id: "course-2",
-    title: "Web Development Fundamentals",
-    description: "Master HTML, CSS, and JavaScript to build modern, responsive websites from scratch.",
-    code: "WEB201",
-    lecturerId: "lecturer-1",
-    lecturerName: "Prof. John Lecturer",
-    enrolledCount: 32,
-    maxEnrollment: 40,
-    status: "published",
-    facultyId: "fac-1",
-    departmentId: "dept-1",
-    programId: "prog-1",
-    levelValue: 200,
-    academicPeriodId: "ap-2",
-    createdAt: new Date("2024-02-01"),
-    updatedAt: new Date("2024-02-10"),
-  },
-  {
-    id: "course-3",
-    title: "Database Systems",
-    description: "Explore relational databases, SQL, and modern database design patterns for scalable applications.",
-    code: "DB301",
-    lecturerId: "lecturer-2",
-    lecturerName: "Dr. Jane Smith",
-    enrolledCount: 28,
-    maxEnrollment: 35,
-    status: "published",
-    facultyId: "fac-1",
-    departmentId: "dept-2",
-    programId: "prog-3",
-    levelValue: 300,
-    academicPeriodId: "ap-1",
-    createdAt: new Date("2024-01-20"),
-    updatedAt: new Date("2024-02-05"),
-  },
-];
-
 export function CourseProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Load from localStorage or use mock data
-    const storedCourses = localStorage.getItem("eduplatform-courses");
-    const storedEnrollments = localStorage.getItem("eduplatform-enrollments");
-    
-    if (storedCourses) {
-      setCourses(JSON.parse(storedCourses).map((c: Course) => ({
-        ...c,
-        createdAt: new Date(c.createdAt),
-        updatedAt: new Date(c.updatedAt),
-      })));
-    } else {
-      setCourses(mockCourses);
-      localStorage.setItem("eduplatform-courses", JSON.stringify(mockCourses));
-    }
-    
-    if (storedEnrollments) {
-      setEnrollments(JSON.parse(storedEnrollments).map((e: Enrollment) => ({
-        ...e,
-        enrolledAt: new Date(e.enrolledAt),
-      })));
-    }
-    
-    setIsLoading(false);
-  }, []);
-
-  // Persist to localStorage
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-courses", JSON.stringify(courses));
-    }
-  }, [courses, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-enrollments", JSON.stringify(enrollments));
-    }
-  }, [enrollments, isLoading]);
+  const { data: courses, isLoading, error } = useCoursesQuery();
+  const createCourseMutation = useCreateCourse();
+  const updateCourseMutation = useUpdateCourse();
+  const deleteCourseMutation = useDeleteCourse();
+  const enrollMutation = useEnrollCourse();
 
   const createCourse = async (courseData: Omit<Course, "id" | "createdAt" | "updatedAt" | "lecturerId" | "lecturerName" | "enrolledCount">): Promise<Course> => {
     if (!user) throw new Error("Must be logged in to create a course");
-    
-    const newCourse: Course = {
-      ...courseData,
-      id: `course-${Date.now()}`,
-      lecturerId: user.id,
-      lecturerName: `${user.firstName} ${user.lastName}`,
-      enrolledCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    
-    setCourses((prev) => [...prev, newCourse]);
-    return newCourse;
+
+    const result = await createCourseMutation.mutateAsync(courseData);
+    return result;
   };
 
   const updateCourse = async (id: string, updates: Partial<Course>): Promise<Course> => {
-    const updatedCourse = courses.find((c) => c.id === id);
-    if (!updatedCourse) throw new Error("Course not found");
-    
-    const updated = { ...updatedCourse, ...updates, updatedAt: new Date() };
-    setCourses((prev) => prev.map((c) => (c.id === id ? updated : c)));
-    return updated;
+    const result = await updateCourseMutation.mutateAsync({ id, data: updates });
+    return result;
   };
 
   const deleteCourse = async (id: string): Promise<void> => {
-    setCourses((prev) => prev.filter((c) => c.id !== id));
-    setEnrollments((prev) => prev.filter((e) => e.courseId !== id));
+    await deleteCourseMutation.mutateAsync(id);
   };
 
   const enrollInCourse = async (courseId: string): Promise<Enrollment> => {
     if (!user) throw new Error("Must be logged in to enroll");
-    
-    const existing = enrollments.find(
-      (e) => e.courseId === courseId && e.studentId === user.id
-    );
-    if (existing) throw new Error("Already enrolled in this course");
-    
-    const enrollment: Enrollment = {
-      id: `enrollment-${Date.now()}`,
-      courseId,
-      studentId: user.id,
-      studentName: `${user.firstName} ${user.lastName}`,
-      enrolledAt: new Date(),
-      status: "active",
-    };
-    
-    setEnrollments((prev) => [...prev, enrollment]);
-    setCourses((prev) =>
-      prev.map((c) =>
-        c.id === courseId ? { ...c, enrolledCount: c.enrolledCount + 1 } : c
-      )
-    );
-    
-    return enrollment;
+
+    const result = await enrollMutation.mutateAsync(courseId);
+    return result;
   };
 
   const unenrollFromCourse = async (courseId: string): Promise<void> => {
-    if (!user) throw new Error("Must be logged in to unenroll");
-    
-    setEnrollments((prev) =>
-      prev.filter((e) => !(e.courseId === courseId && e.studentId === user.id))
-    );
-    setCourses((prev) =>
-      prev.map((c) =>
-        c.id === courseId ? { ...c, enrolledCount: Math.max(0, c.enrolledCount - 1) } : c
-      )
-    );
+    // Will be implemented when backend endpoint is available
+    throw new Error("Unenroll not yet implemented");
   };
 
   const getCoursesWithEnrollment = (): CourseWithEnrollment[] => {
-    return courses.map((course) => {
-      const enrollment = enrollments.find(
-        (e) => e.courseId === course.id && e.studentId === user?.id
-      );
-      return {
-        ...course,
-        enrollment,
-        isEnrolled: !!enrollment,
-      };
-    });
+    if (!courses) return [];
+
+    return courses.map((course) => ({
+      ...course,
+      enrollment: undefined,
+      isEnrolled: false, // Will be determined from backend enrollment data
+    }));
   };
 
   const getMyCourses = (): Course[] => {
-    if (!user) return [];
+    if (!user || !courses) return [];
     return courses.filter((c) => c.lecturerId === user.id);
   };
 
@@ -218,9 +85,10 @@ export function CourseProvider({ children }: { children: ReactNode }) {
   return (
     <CourseContext.Provider
       value={{
-        courses,
-        enrollments,
+        courses: courses as Course[] | undefined,
+        enrollments: [],
         isLoading,
+        error: error as Error | null,
         createCourse,
         updateCourse,
         deleteCourse,
