@@ -7,7 +7,7 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
-import { initDatabase } from './database.js';
+import { initDatabase, db } from './database.js';
 import { authRoutes } from './routes/auth.js';
 import { coursesRoutes } from './routes/courses.js';
 import { assignmentsRoutes } from './routes/assignments.js';
@@ -65,10 +65,34 @@ app.use('/api/v1/files', authMiddleware, filesRoutes);
 app.use('/api/v1/analytics', authMiddleware, analyticsRoutes);
 
 // Health check
-app.get('/api/v1/health/liveness', (req, res) => {
-  res.json({ status: 'ok' });
+app.get('/api/v1/health/liveness', async (req, res) => {
+  try {
+    // Basic DB check
+    const result = await db.query('SELECT 1');
+    res.json({
+      status: 'ok',
+      database: 'connected',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error: any) {
+    console.error('Health check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      database: 'disconnected',
+      error: error.message,
+      code: error.code
+    });
+  }
 });
 
+app.get('/api/v1/health/check', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ status: 'ok', db: 'connected' });
+  } catch (e: any) {
+    res.status(500).json({ status: 'error', db: 'disconnected', error: e.message });
+  }
+});
 const server = http.createServer(app);
 
 type Client = {

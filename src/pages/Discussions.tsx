@@ -445,7 +445,7 @@ export default function Discussions() {
                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Avatar className="h-6 w-6">
                           <AvatarImage src={selectedPost.author.avatar} />
-                          <AvatarFallback>{selectedPost.author.name.charAt(0)}</AvatarFallback>
+                          <AvatarFallback>{selectedPost.author.name?.charAt(0) || "?"}</AvatarFallback>
                         </Avatar>
                         <span>{selectedPost.author.name}</span>
                         <span>•</span>
@@ -473,7 +473,7 @@ export default function Discussions() {
                       <div key={comment.id} className="flex gap-3">
                         <Avatar className="h-8 w-8">
                           <AvatarImage src={comment.author.avatar} />
-                          <AvatarFallback>{comment.author.name.charAt(0)}</AvatarFallback>
+                          <AvatarFallback>{comment.author.name?.charAt(0) || "?"}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 bg-muted/50 rounded-lg p-3">
                           <div className="flex items-center justify-between mb-1">
