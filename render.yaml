@@ -1,0 +1,38 @@
+services:
+  # Backend Web Service
+  - type: web
+    name: ubids-eduplat-backend
+    runtime: node
+    region: oregon
+    plan: free
+    rootDir: backend-simple
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false  # You'll set this manually in Render dashboard
+      - key: JWT_SECRET
+        generateValue: true  # Render will auto-generate this
+      - key: CORS_ORIGIN
+        value: https://ubids-eduplat-frontend.onrender.com
+      - key: LIVEKIT_API_KEY
+        sync: false  # Optional: Set manually if using LiveKit
+      - key: LIVEKIT_API_SECRET
+        sync: false  # Optional: Set manually if using LiveKit
+      - key: LIVEKIT_URL
+        sync: false  # Optional: Set manually if using LiveKit
+
+  # Frontend Static Site
+  - type: web
+    name: ubids-eduplat-frontend
+    runtime: static
+    region: oregon
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://ubids-eduplat-backend.onrender.com
+      - key: VITE_LIVEKIT_URL
+        sync: false  # Optional: Set manually if using LiveKit
