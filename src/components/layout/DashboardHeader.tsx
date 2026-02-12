@@ -24,8 +24,8 @@ export function DashboardHeader() {
     navigate("/login");
   };
 
-  const getInitials = (firstName: string, lastName: string) => {
-    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
+  const getInitials = (firstName?: string, lastName?: string) => {
+    return `${(firstName || "").charAt(0)}${(lastName || "").charAt(0)}`.toUpperCase();
   };
 
   return (
