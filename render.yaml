@@ -28,7 +28,6 @@ services:
   - type: web
     name: ubids-eduplat-frontend
     runtime: static
-    region: oregon
     buildCommand: npm install && npm run build
     staticPublishPath: dist
     envVars:
