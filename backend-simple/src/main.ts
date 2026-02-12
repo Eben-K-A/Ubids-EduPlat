@@ -14,6 +14,14 @@ import { assignmentsRoutes } from './routes/assignments.js';
 import { usersRoutes } from './routes/users.js';
 import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { meetingsRoutes } from './routes/meetings.js';
+import { modulesRoutes } from './routes/modules.js';
+import { quizzesRoutes } from './routes/quizzes.js';
+import { classroomRoutes } from './routes/classroom.js';
+import { notificationsRoutes } from './routes/notifications.js';
+import { messagesRoutes } from './routes/messages.js';
+import { discussionsRoutes } from './routes/discussions.js';
+import { filesRoutes } from './routes/files.js';
+import { analyticsRoutes } from './routes/analytics.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,15 +30,22 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 const app = express();
 const PORT = process.env.PORT || 4000;
 const RECORDINGS_DIR = process.env.RECORDINGS_DIR || path.join(process.cwd(), 'recordings');
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), 'uploads');
 
 // Middleware
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 fs.mkdirSync(RECORDINGS_DIR, { recursive: true });
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 app.use('/recordings', express.static(RECORDINGS_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Initialize database
-initDatabase();
+try {
+  await initDatabase();
+} catch (error: any) {
+  console.warn('⚠️  Database initialization encountered an error, server will continue without database');
+}
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
@@ -38,6 +53,14 @@ app.use('/api/v1/courses', authMiddleware, coursesRoutes);
 app.use('/api/v1/assignments', authMiddleware, assignmentsRoutes);
 app.use('/api/v1/users', authMiddleware, usersRoutes);
 app.use('/api/v1/meetings', optionalAuthMiddleware, meetingsRoutes);
+app.use('/api/v1/modules', authMiddleware, modulesRoutes);
+app.use('/api/v1/quizzes', authMiddleware, quizzesRoutes);
+app.use('/api/v1/classroom', authMiddleware, classroomRoutes);
+app.use('/api/v1/notifications', authMiddleware, notificationsRoutes);
+app.use('/api/v1/messages', authMiddleware, messagesRoutes);
+app.use('/api/v1/discussions', authMiddleware, discussionsRoutes);
+app.use('/api/v1/files', authMiddleware, filesRoutes);
+app.use('/api/v1/analytics', authMiddleware, analyticsRoutes);
 
 // Health check
 app.get('/api/v1/health/liveness', (req, res) => {
