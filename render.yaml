@@ -32,6 +32,6 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_API_URL
-        value: https://ubids-eduplat-backend.onrender.com
+        value: https://ubids-eduplat-backend.onrender.com/api/v1
       - key: VITE_LIVEKIT_URL
         sync: false  # Optional: Set manually if using LiveKit
