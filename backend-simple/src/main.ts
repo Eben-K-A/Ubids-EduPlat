@@ -41,11 +41,13 @@ app.use('/recordings', express.static(RECORDINGS_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Initialize database
-try {
-  await initDatabase();
-} catch (error: any) {
-  console.warn('⚠️  Database initialization encountered an error, server will continue without database');
-}
+(async () => {
+  try {
+    await initDatabase();
+  } catch (error: any) {
+    console.warn('⚠️  Database initialization encountered an error, server will continue without database');
+  }
+})();
 
 // Routes
 app.use('/api/v1/auth', authRoutes);

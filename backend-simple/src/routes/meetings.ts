@@ -8,10 +8,7 @@ import { db } from '../database.js';
 
 export const meetingsRoutes = Router();
 
-// Extend Request type locally for type safety
-interface AuthRequest extends Request {
-  user?: { id: string; email: string; role: string; firstName?: string; lastName?: string };
-}
+// Helper functions (implicitly using global Express.Request with user property)
 
 const generateMeetingCode = () => {
   const letters = () => Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -131,7 +128,7 @@ const expandRecurringMeeting = async (baseMeeting: any, occurrences: number = 12
   return meetings;
 };
 
-meetingsRoutes.get('/', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.get('/', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().toLowerCase();
     const result = await db.query('SELECT * FROM meetings ORDER BY "startTime" ASC');
@@ -155,7 +152,7 @@ meetingsRoutes.get('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.get('/:id', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const result = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
@@ -179,7 +176,7 @@ meetingsRoutes.get('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.post('/', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.post('/', async (req: Request, res: Response) => {
   try {
     const {
       title,
@@ -276,7 +273,7 @@ meetingsRoutes.post('/', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.post('/:id/join', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.post('/:id/join', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const result = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
@@ -343,7 +340,7 @@ meetingsRoutes.post('/:id/join', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.get('/:id/waiting', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.get('/:id/waiting', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -361,7 +358,7 @@ meetingsRoutes.get('/:id/waiting', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.get('/:id/waiting/:requestId', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.get('/:id/waiting/:requestId', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -399,7 +396,7 @@ meetingsRoutes.get('/:id/waiting/:requestId', async (req: AuthRequest, res: Resp
   }
 });
 
-meetingsRoutes.post('/:id/waiting/:requestId/approve', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.post('/:id/waiting/:requestId/approve', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -423,7 +420,7 @@ meetingsRoutes.post('/:id/waiting/:requestId/approve', async (req: AuthRequest, 
   }
 });
 
-meetingsRoutes.post('/:id/waiting/:requestId/deny', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.post('/:id/waiting/:requestId/deny', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -447,7 +444,7 @@ meetingsRoutes.post('/:id/waiting/:requestId/deny', async (req: AuthRequest, res
   }
 });
 
-meetingsRoutes.put('/:id', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.put('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
@@ -552,7 +549,7 @@ meetingsRoutes.put('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.delete('/:id', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
@@ -574,7 +571,7 @@ meetingsRoutes.delete('/:id', async (req: AuthRequest, res: Response) => {
   }
 });
 
-meetingsRoutes.get('/:id/recordings', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.get('/:id/recordings', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -589,7 +586,7 @@ meetingsRoutes.get('/:id/recordings', async (req: AuthRequest, res: Response) =>
   }
 });
 
-meetingsRoutes.post('/:id/recordings/start', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.post('/:id/recordings/start', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -630,7 +627,7 @@ meetingsRoutes.post('/:id/recordings/start', async (req: AuthRequest, res: Respo
       // But keeping it simple: We will try to use the `s3` output type if we had the struct, but here we are using `file`.
       // Let's assume the user has configured an S3 bucket in LiveKit Cloud.
       // If so, we can just specify a filename without a path, or a path prefix.
-      const filename = `${meetingCode}-${Date.now()}.mp4`;
+      const filename = `${meeting.meetingCode}-${Date.now()}.mp4`;
       output = {
         file: {
           filepath: filename, // Just the filename, Egress service will put it in the configured bucket
@@ -667,7 +664,7 @@ meetingsRoutes.post('/:id/recordings/start', async (req: AuthRequest, res: Respo
 });
 
 
-meetingsRoutes.get('/personal-meeting/current', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Response) => {
   try {
     if (!req.user) {
       return res.status(401).json({ message: 'Not authenticated' });
@@ -751,7 +748,7 @@ meetingsRoutes.get('/personal-meeting/current', async (req: AuthRequest, res: Re
   }
 });
 
-meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
@@ -789,7 +786,7 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: AuthRequest
   }
 });
 
-meetingsRoutes.delete('/:id/recordings/:recordingId', async (req: AuthRequest, res: Response) => {
+meetingsRoutes.delete('/:id/recordings/:recordingId', async (req: Request, res: Response) => {
   try {
     const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];

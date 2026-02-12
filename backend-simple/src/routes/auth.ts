@@ -21,7 +21,13 @@ authRoutes.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    const token = generateToken(user.id, user.email, user.role);
+    const token = generateToken({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      firstName: user.firstName,
+      lastName: user.lastName
+    });
 
     res.json({
       access_token: token,
@@ -63,7 +69,13 @@ authRoutes.post('/register', async (req: Request, res: Response) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [id, email, hashedPassword, firstName, lastName, role, now, now]);
 
-    const token = generateToken(id, email, role);
+    const token = generateToken({
+      id,
+      email,
+      role,
+      firstName,
+      lastName
+    });
 
     res.json({
       access_token: token,
