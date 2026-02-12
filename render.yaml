@@ -25,9 +25,8 @@ services:
         sync: false  # Optional: Set manually if using LiveKit
 
   # Frontend Static Site
-  - type: web
+  - type: static
     name: ubids-eduplat-frontend
-    runtime: static
     region: oregon
     buildCommand: npm install && npm run build
     staticPublishPath: dist
