@@ -11,3 +11,5 @@ npm run dev
 cd /home/nezer/Software\ Project/UBIDS\ EduPlat
 caddy run --config Caddyfile
 
+docker run --rm -p 7880:7880 -p 7881:7881 -p 7882:7882/udp -p 50000-60000:50000-60000/udp -e LIVEKIT_KEYS="devkey: devsecret" -e LIVEKIT_EXTERNAL_IP=192.168.102.252 livekit/livekit-server --dev
+To stop it later: docker stop livekit

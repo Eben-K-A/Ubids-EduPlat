@@ -15,16 +15,16 @@ messagesRoutes.get('/conversations', async (req: Request, res: Response) => {
     try {
         const result = await db.query(`
             SELECT c.*, 
-                (SELECT COUNT(*) FROM conversation_members cm2 WHERE cm2."conversationId" = c.id) as "memberCount",
+                (SELECT COUNT(*) FROM conversation_members cm2 WHERE cm2.conversationId = c.id) as "memberCount",
                 m.content as "lastMessageContent",
-                m."senderId" as "lastMessageSenderId",
-                m."createdAt" as "lastMessageTime",
-                cm."joinedAt"
+                m.senderId as "lastMessageSenderId",
+                m.createdAt as "lastMessageTime",
+                cm.joinedAt
             FROM conversations c
-            JOIN conversation_members cm ON c.id = cm."conversationId"
-            LEFT JOIN messages m ON c."lastMessageId" = m.id
-            WHERE cm."userId" = $1
-            ORDER BY m."createdAt" DESC
+            JOIN conversation_members cm ON c.id = cm.conversationId
+            LEFT JOIN messages m ON c.lastMessageId = m.id
+            WHERE cm.userId = $1
+            ORDER BY m.createdAt DESC
         `, [userId]);
 
         const conversations = result.rows;
@@ -32,10 +32,10 @@ messagesRoutes.get('/conversations', async (req: Request, res: Response) => {
         // For each conversation, get members and other details
         const enrichedConversations = await Promise.all(conversations.map(async (conv: any) => {
             const membersResult = await db.query(`
-                SELECT u.id, u."firstName", u."lastName", u.email, u.role
+                SELECT u.id, u.firstName, u.lastName, u.email, u.role
                 FROM users u
-                JOIN conversation_members cm ON u.id = cm."userId"
-                WHERE cm."conversationId" = $1
+                JOIN conversation_members cm ON u.id = cm.userId
+                WHERE cm.conversationId = $1
             `, [conv.id]);
 
             const members = membersResult.rows;
@@ -100,9 +100,9 @@ messagesRoutes.post('/conversations', async (req: Request, res: Response) => {
             const existingResult = await client.query(`
                 SELECT c.id 
                 FROM conversations c
-                JOIN conversation_members cm1 ON c.id = cm1."conversationId"
-                JOIN conversation_members cm2 ON c.id = cm2."conversationId"
-                WHERE c.type = 'direct' AND cm1."userId" = $1 AND cm2."userId" = $2
+                JOIN conversation_members cm1 ON c.id = cm1.conversationId
+                JOIN conversation_members cm2 ON c.id = cm2.conversationId
+                WHERE c.type = 'direct' AND cm1.userId = $1 AND cm2.userId = $2
             `, [userId, otherId]);
 
             if (existingResult.rows.length > 0) {
@@ -115,13 +115,13 @@ messagesRoutes.post('/conversations', async (req: Request, res: Response) => {
         const now = new Date().toISOString();
 
         await client.query(`
-            INSERT INTO conversations (id, type, name, "updatedAt", "createdAt")
+            INSERT INTO conversations (id, type, name, updatedAt, createdAt)
             VALUES ($1, $2, $3, $4, $5)
         `, [id, type || 'direct', name, now, now]);
 
         for (const mid of allMemberIds) {
             await client.query(`
-                INSERT INTO conversation_members ("conversationId", "userId", "joinedAt")
+                INSERT INTO conversation_members (conversationId, userId, joinedAt)
                 VALUES ($1, $2, $3)
             `, [id, mid, now]);
         }
@@ -147,7 +147,7 @@ messagesRoutes.get('/conversations/:id/messages', async (req: Request, res: Resp
     try {
         // Verify membership
         const isMemberResult = await db.query(`
-            SELECT 1 FROM conversation_members WHERE "conversationId" = $1 AND "userId" = $2
+            SELECT 1 FROM conversation_members WHERE conversationId = $1 AND userId = $2
         `, [conversationId, userId]);
 
         if (isMemberResult.rows.length === 0) {
@@ -155,11 +155,11 @@ messagesRoutes.get('/conversations/:id/messages', async (req: Request, res: Resp
         }
 
         const messagesResult = await db.query(`
-            SELECT m.*, u."firstName", u."lastName"
+            SELECT m.*, u.firstName, u.lastName
             FROM messages m
-            JOIN users u ON m."senderId" = u.id
-            WHERE m."conversationId" = $1
-            ORDER BY m."createdAt" ASC
+            JOIN users u ON m.senderId = u.id
+            WHERE m.conversationId = $1
+            ORDER BY m.createdAt ASC
             LIMIT 100
         `, [conversationId]);
 
@@ -169,9 +169,9 @@ messagesRoutes.get('/conversations/:id/messages', async (req: Request, res: Resp
             // Fetch reactions
             const reactionsResult = await db.query(`
                 SELECT emoji, COUNT(*) as count, 
-                MAX(CASE WHEN "userId" = $1 THEN 1 ELSE 0 END) as "byMe"
+                MAX(CASE WHEN userId = $1 THEN 1 ELSE 0 END) as "byMe"
                 FROM message_reactions
-                WHERE "messageId" = $2
+                WHERE messageId = $2
                 GROUP BY emoji
             `, [userId, m.id]);
 
@@ -179,7 +179,7 @@ messagesRoutes.get('/conversations/:id/messages', async (req: Request, res: Resp
 
             let replyTo = undefined;
             if (m.replyToId) {
-                const replyResult = await db.query('SELECT "senderId", content FROM messages WHERE id = $1', [m.replyToId]);
+                const replyResult = await db.query('SELECT senderId, content FROM messages WHERE id = $1', [m.replyToId]);
                 replyTo = replyResult.rows[0];
             }
 
@@ -221,7 +221,7 @@ messagesRoutes.post('/conversations/:id/messages', async (req: Request, res: Res
     const client = await db.connect();
     try {
         const isMemberResult = await client.query(`
-            SELECT 1 FROM conversation_members WHERE "conversationId" = $1 AND "userId" = $2
+            SELECT 1 FROM conversation_members WHERE conversationId = $1 AND userId = $2
         `, [conversationId, userId]);
 
         if (isMemberResult.rows.length === 0) {
@@ -234,13 +234,13 @@ messagesRoutes.post('/conversations/:id/messages', async (req: Request, res: Res
         await client.query('BEGIN');
 
         await client.query(`
-            INSERT INTO messages (id, "conversationId", "senderId", content, type, "voiceDuration", "replyToId", "createdAt", "updatedAt")
+            INSERT INTO messages (id, conversationId, senderId, content, type, voiceDuration, replyToId, createdAt, updatedAt)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `, [id, conversationId, userId, content || '', type || 'text', voiceDuration, replyToId, now, now]);
 
         await client.query(`
             UPDATE conversations 
-            SET "lastMessageId" = $1, "updatedAt" = $2 
+            SET lastMessageId = $1, updatedAt = $2 
             WHERE id = $3
         `, [id, now, conversationId]);
 
@@ -279,18 +279,18 @@ messagesRoutes.post('/messages/:id/react', async (req: Request, res: Response) =
 
     try {
         const existingResult = await db.query(`
-           SELECT 1 FROM message_reactions WHERE "messageId" = $1 AND "userId" = $2 AND emoji = $3
-       `, [messageId, userId, emoji]);
+            SELECT 1 FROM message_reactions WHERE messageId = $1 AND userId = $2 AND emoji = $3
+        `, [messageId, userId, emoji]);
 
         const existing = existingResult.rows[0];
 
         if (existing) {
-            await db.query(`DELETE FROM message_reactions WHERE "messageId" = $1 AND "userId" = $2 AND emoji = $3`, [messageId, userId, emoji]);
+            await db.query(`DELETE FROM message_reactions WHERE messageId = $1 AND userId = $2 AND emoji = $3`, [messageId, userId, emoji]);
         } else {
             await db.query(`
-             INSERT INTO message_reactions ("messageId", "userId", emoji, "createdAt")
-             VALUES ($1, $2, $3, $4)
-           `, [messageId, userId, emoji, new Date().toISOString()]);
+                INSERT INTO message_reactions (messageId, userId, emoji, createdAt)
+                VALUES ($1, $2, $3, $4)
+            `, [messageId, userId, emoji, new Date().toISOString()]);
         }
 
         res.json({ success: true });
@@ -310,7 +310,7 @@ messagesRoutes.post('/conversations/:id/read', async (req: Request, res: Respons
     try {
         // Find the last message in the conversation
         const lastMessageResult = await db.query(`
-            SELECT id FROM messages WHERE "conversationId" = $1 ORDER BY "createdAt" DESC LIMIT 1
+            SELECT id FROM messages WHERE conversationId = $1 ORDER BY createdAt DESC LIMIT 1
         `, [conversationId]);
 
         const lastMessage = lastMessageResult.rows[0];
@@ -318,8 +318,8 @@ messagesRoutes.post('/conversations/:id/read', async (req: Request, res: Respons
         if (lastMessage) {
             await db.query(`
                 UPDATE conversation_members 
-                SET "lastReadMessageId" = $1
-                WHERE "conversationId" = $2 AND "userId" = $3
+                SET lastReadMessageId = $1
+                WHERE conversationId = $2 AND userId = $3
             `, [lastMessage.id, conversationId, userId]);
         }
 

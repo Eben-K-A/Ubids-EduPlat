@@ -13,11 +13,11 @@ assignmentsRoutes.get('/', async (req: Request, res: Response) => {
     let params: any[] = [];
 
     if (courseId) {
-      query += ' WHERE "courseId" = $1';
+      query += ' WHERE courseId = $1';
       params.push(courseId);
     }
 
-    query += ' ORDER BY "dueDate" ASC';
+    query += ' ORDER BY dueDate ASC';
 
     const result = await db.query(query, params);
     res.json(result.rows);
@@ -66,7 +66,7 @@ assignmentsRoutes.post('/', async (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     await db.query(`
-      INSERT INTO assignments (id, "courseId", title, description, "dueDate", "createdAt", "updatedAt")
+      INSERT INTO assignments (id, courseId, title, description, dueDate, createdAt, updatedAt)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
     `, [id, courseId, title, description, dueDate, now, now]);
 
@@ -106,7 +106,7 @@ assignmentsRoutes.put('/:id', async (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     await db.query(`
-      UPDATE assignments SET title = $1, description = $2, "dueDate" = $3, "updatedAt" = $4 WHERE id = $5
+      UPDATE assignments SET title = $1, description = $2, dueDate = $3, updatedAt = $4 WHERE id = $5
     `, [title || assignment.title, description || assignment.description, dueDate || assignment.dueDate, now, req.params.id]);
 
     res.json({ message: 'Assignment updated' });
@@ -153,17 +153,17 @@ assignmentsRoutes.post('/:id/submit', async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Assignment not found' });
     }
 
-    const existResult = await db.query('SELECT * FROM submissions WHERE "assignmentId" = $1 AND "studentId" = $2', [req.params.id, req.user?.id]);
+    const existResult = await db.query('SELECT * FROM submissions WHERE assignmentId = $1 AND studentId = $2', [req.params.id, req.user?.id]);
     const existing = existResult.rows[0];
 
     const id = existing ? existing.id : randomUUID();
     const now = new Date().toISOString();
 
     if (existing) {
-      await db.query('UPDATE submissions SET content = $1, "submittedAt" = $2, "updatedAt" = $3 WHERE id = $4', [content, now, now, id]);
+      await db.query('UPDATE submissions SET content = $1, submittedAt = $2, updatedAt = $3 WHERE id = $4', [content, now, now, id]);
     } else {
       await db.query(`
-        INSERT INTO submissions (id, "assignmentId", "studentId", content, "submittedAt", "createdAt", "updatedAt")
+        INSERT INTO submissions (id, assignmentId, studentId, content, submittedAt, createdAt, updatedAt)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [id, req.params.id, req.user?.id, content, now, now, now]);
     }
@@ -198,7 +198,7 @@ assignmentsRoutes.post('/:id/submissions/:submissionId/grade', async (req: Reque
     }
 
     const now = new Date().toISOString();
-    await db.query('UPDATE submissions SET grade = $1, feedback = $2, "updatedAt" = $3 WHERE id = $4', [grade, feedback, now, req.params.submissionId]);
+    await db.query('UPDATE submissions SET grade = $1, feedback = $2, updatedAt = $3 WHERE id = $4', [grade, feedback, now, req.params.submissionId]);
 
     res.json({ message: 'Submission graded successfully' });
   } catch (error) {

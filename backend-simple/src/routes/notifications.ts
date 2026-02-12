@@ -18,7 +18,7 @@ notificationsRoutes.get('/', async (req: Request, res: Response) => {
 
   try {
     const result = await db.query(
-      'SELECT id, title, message, type, read, "createdAt", link FROM notifications WHERE "userId" = $1 ORDER BY "createdAt" DESC',
+      'SELECT id, title, message, type, read, createdAt, link FROM notifications WHERE userId = $1 ORDER BY createdAt DESC',
       [req.user!.id]
     );
     const rows = result.rows;
@@ -49,7 +49,7 @@ notificationsRoutes.post('/', async (req: Request, res: Response) => {
 
   try {
     await db.query(
-      'INSERT INTO notifications (id, "userId", title, message, type, read, link, "createdAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+      'INSERT INTO notifications (id, userId, title, message, type, read, link, createdAt) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
       [id, req.user!.id, title, message, type, 0, link ?? null, now]
     );
 
@@ -73,7 +73,7 @@ notificationsRoutes.post('/:id/read', async (req: Request, res: Response) => {
   if (!requireUser(req, res)) return;
 
   try {
-    await db.query('UPDATE notifications SET read = 1 WHERE id = $1 AND "userId" = $2', [
+    await db.query('UPDATE notifications SET read = 1 WHERE id = $1 AND userId = $2', [
       req.params.id,
       req.user!.id
     ]);
@@ -89,7 +89,7 @@ notificationsRoutes.post('/read-all', async (req: Request, res: Response) => {
   if (!requireUser(req, res)) return;
 
   try {
-    await db.query('UPDATE notifications SET read = 1 WHERE "userId" = $1', [req.user!.id]);
+    await db.query('UPDATE notifications SET read = 1 WHERE userId = $1', [req.user!.id]);
     res.json({ success: true });
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
@@ -102,7 +102,7 @@ notificationsRoutes.delete('/:id', async (req: Request, res: Response) => {
   if (!requireUser(req, res)) return;
 
   try {
-    await db.query('DELETE FROM notifications WHERE id = $1 AND "userId" = $2', [
+    await db.query('DELETE FROM notifications WHERE id = $1 AND userId = $2', [
       req.params.id,
       req.user!.id
     ]);

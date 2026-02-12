@@ -21,10 +21,10 @@ quizzesRoutes.get('/', async (req: Request, res: Response) => {
     let query = 'SELECT * FROM quizzes';
     const params: any[] = [];
     if (courseId) {
-      query += ' WHERE "courseId" = $1';
+      query += ' WHERE courseId = $1';
       params.push(courseId);
     }
-    query += ' ORDER BY "createdAt" DESC';
+    query += ' ORDER BY createdAt DESC';
 
     const result = await db.query(query, params);
     const rows = result.rows;
@@ -74,7 +74,7 @@ quizzesRoutes.post('/', async (req: Request, res: Response) => {
 
     await db.query(
       `INSERT INTO quizzes
-        (id, "courseId", title, description, "timeLimit", "dueDate", status, "questionsJson", "createdAt", "updatedAt")
+        (id, courseId, title, description, timeLimit, dueDate, status, questionsJson, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         id,
@@ -126,11 +126,11 @@ quizzesRoutes.put('/:id', async (req: Request, res: Response) => {
       `UPDATE quizzes
        SET title = COALESCE($1, title),
            description = COALESCE($2, description),
-           "timeLimit" = COALESCE($3, "timeLimit"),
-           "dueDate" = COALESCE($4, "dueDate"),
+           timeLimit = COALESCE($3, timeLimit),
+           dueDate = COALESCE($4, dueDate),
            status = COALESCE($5, status),
-           "questionsJson" = $6,
-           "updatedAt" = $7
+           questionsJson = $6,
+           updatedAt = $7
        WHERE id = $8`,
       [
         title ?? null,
@@ -160,7 +160,7 @@ quizzesRoutes.put('/:id', async (req: Request, res: Response) => {
 // Delete quiz and its attempts
 quizzesRoutes.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await db.query('DELETE FROM quiz_attempts WHERE "quizId" = $1', [req.params.id]);
+    await db.query('DELETE FROM quiz_attempts WHERE quizId = $1', [req.params.id]);
     await db.query('DELETE FROM quizzes WHERE id = $1', [req.params.id]);
     res.json({ message: 'Quiz deleted' });
   } catch (error) {
@@ -189,7 +189,7 @@ quizzesRoutes.post('/:id/attempts', async (req: Request, res: Response) => {
 
     await db.query(
       `INSERT INTO quiz_attempts
-        (id, "quizId", "studentId", "studentName", "answersJson", score, "maxScore", "startedAt", "completedAt", status, "createdAt", "updatedAt")
+        (id, quizId, studentId, studentName, answersJson, score, maxScore, startedAt, completedAt, status, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         id,
@@ -266,7 +266,7 @@ quizzesRoutes.post('/attempts/:attemptId/submit', async (req: Request, res: Resp
 
     await db.query(
       `UPDATE quiz_attempts
-       SET "answersJson" = $1, score = $2, "completedAt" = $3, status = $4, "updatedAt" = $5
+       SET answersJson = $1, score = $2, completedAt = $3, status = $4, updatedAt = $5
        WHERE id = $6`,
       [JSON.stringify(gradedAnswers), score, now, 'completed', now, req.params.attemptId]
     );

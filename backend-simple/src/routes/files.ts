@@ -38,7 +38,7 @@ filesRoutes.post('/upload', upload.single('file'), async (req: Request, res: Res
         const now = new Date().toISOString();
 
         await db.query(`
-            INSERT INTO files (id, "courseId", filename, path, mimetype, size, "uploadedBy", "createdAt")
+            INSERT INTO files (id, courseId, filename, path, mimetype, size, uploadedBy, createdAt)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         `, [
             id,
@@ -69,18 +69,18 @@ filesRoutes.get('/', async (req: Request, res: Response) => {
     try {
         const { courseId } = req.query;
         let query = `
-            SELECT f.*, u."firstName" || ' ' || u."lastName" as "uploaderName" 
+            SELECT f.*, u.firstName || ' ' || u.lastName as "uploaderName" 
             FROM files f
-            JOIN users u ON f."uploadedBy" = u.id
+            JOIN users u ON f.uploadedBy = u.id
         `;
         const params: any[] = [];
 
         if (courseId) {
-            query += ` WHERE f."courseId" = $1`;
+            query += ` WHERE f.courseId = $1`;
             params.push(courseId);
         }
 
-        query += ` ORDER BY f."createdAt" DESC`;
+        query += ` ORDER BY f.createdAt DESC`;
 
         const result = await db.query(query, params);
         res.json(result.rows);

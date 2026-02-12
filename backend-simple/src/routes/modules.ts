@@ -73,7 +73,7 @@ modulesRoutes.post('/', async (req: Request, res: Response) => {
     const orderIndex = typeof order === 'number' ? order : 1;
 
     await db.query(
-      `INSERT INTO modules (id, "courseId", title, description, "orderIndex", "createdAt", "updatedAt")
+      `INSERT INTO modules (id, courseId, title, description, orderIndex, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, courseId, title, description ?? null, orderIndex, now, now]
     );
@@ -111,8 +111,8 @@ modulesRoutes.put('/:id', async (req: Request, res: Response) => {
       `UPDATE modules
        SET title = COALESCE($1, title),
            description = COALESCE($2, description),
-           "orderIndex" = COALESCE($3, "orderIndex"),
-           "updatedAt" = $4
+           orderIndex = COALESCE($3, orderIndex),
+           updatedAt = $4
        WHERE id = $5`,
       [
         title ?? null,
@@ -168,7 +168,7 @@ modulesRoutes.post('/:moduleId/lessons', async (req: Request, res: Response) => 
     const orderIndex = typeof order === 'number' ? order : 1;
 
     await db.query(
-      `INSERT INTO lessons (id, "moduleId", title, content, type, duration, "orderIndex", "resourceUrl", "createdAt", "updatedAt")
+      `INSERT INTO lessons (id, moduleId, title, content, type, duration, orderIndex, resourceUrl, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         id,
@@ -221,10 +221,10 @@ modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Resp
            content = COALESCE($2, content),
            type = COALESCE($3, type),
            duration = COALESCE($4, duration),
-           "orderIndex" = COALESCE($5, "orderIndex"),
-           "resourceUrl" = COALESCE($6, "resourceUrl"),
-           "updatedAt" = $7
-       WHERE id = $8 AND "moduleId" = $9`,
+           orderIndex = COALESCE($5, orderIndex),
+           resourceUrl = COALESCE($6, resourceUrl),
+           updatedAt = $7
+       WHERE id = $8 AND moduleId = $9`,
       [
         title ?? null,
         content ?? null,
@@ -238,7 +238,7 @@ modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Resp
       ]
     );
 
-    const updatedResult = await db.query('SELECT * FROM lessons WHERE id = $1 AND "moduleId" = $2', [req.params.lessonId, req.params.moduleId]);
+    const updatedResult = await db.query('SELECT * FROM lessons WHERE id = $1 AND moduleId = $2', [req.params.lessonId, req.params.moduleId]);
     const updated = updatedResult.rows[0];
 
     res.json({
@@ -254,7 +254,7 @@ modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Resp
 // Delete lesson
 modulesRoutes.delete('/:moduleId/lessons/:lessonId', async (req: Request, res: Response) => {
   try {
-    await db.query('DELETE FROM lessons WHERE id = $1 AND "moduleId" = $2', [req.params.lessonId, req.params.moduleId]);
+    await db.query('DELETE FROM lessons WHERE id = $1 AND moduleId = $2', [req.params.lessonId, req.params.moduleId]);
     res.json({ message: 'Lesson deleted' });
   } catch (error) {
     console.error('Error deleting lesson:', error);

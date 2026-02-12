@@ -29,12 +29,12 @@ classroomRoutes.get('/state', async (req: Request, res: Response) => {
 
   const courseId = (req.query.courseId as string | undefined) || undefined;
   const params: any[] = [];
-  const filter = courseId ? ' WHERE "courseId" = $1' : '';
+  const filter = courseId ? ' WHERE courseId = $1' : '';
   if (courseId) params.push(courseId);
 
   try {
     const announcementsResult = await db.query(
-      `SELECT * FROM announcements${filter} ORDER BY "isPinned" DESC, "createdAt" DESC`,
+      `SELECT * FROM announcements${filter} ORDER BY isPinned DESC, createdAt DESC`,
       params
     );
     const announcements = announcementsResult.rows;
@@ -45,32 +45,32 @@ classroomRoutes.get('/state', async (req: Request, res: Response) => {
     if (announcementIds.length > 0) {
       // Postgres ANY operator is useful here
       const commentsResult = await db.query(
-        `SELECT * FROM announcement_comments WHERE "announcementId" = ANY($1) ORDER BY "createdAt" ASC`,
+        `SELECT * FROM announcement_comments WHERE announcementId = ANY($1) ORDER BY createdAt ASC`,
         [announcementIds]
       );
       comments = commentsResult.rows;
     }
 
     const materialsResult = await db.query(
-      `SELECT * FROM class_materials${filter} ORDER BY "createdAt" DESC`,
+      `SELECT * FROM class_materials${filter} ORDER BY createdAt DESC`,
       params
     );
     const materials = materialsResult.rows;
 
     const topicsResult = await db.query(
-      `SELECT * FROM class_topics${filter} ORDER BY "orderIndex" ASC`,
+      `SELECT * FROM class_topics${filter} ORDER BY orderIndex ASC`,
       params
     );
     const topics = topicsResult.rows;
 
     const rubricsResult = await db.query(
-      `SELECT * FROM rubrics${filter} ORDER BY "createdAt" DESC`,
+      `SELECT * FROM rubrics${filter} ORDER BY createdAt DESC`,
       params
     );
     const rubrics = rubricsResult.rows;
 
     const invitesResult = await db.query(
-      `SELECT * FROM class_invites${filter} ORDER BY "createdAt" DESC`,
+      `SELECT * FROM class_invites${filter} ORDER BY createdAt DESC`,
       params
     );
     const invites = invitesResult.rows;
@@ -117,7 +117,7 @@ classroomRoutes.post('/announcements', async (req: Request, res: Response) => {
 
   try {
     await db.query(
-      `INSERT INTO announcements (id, "courseId", "authorId", "authorName", "authorRole", content, "attachmentsJson", "isPinned", "createdAt", "updatedAt")
+      `INSERT INTO announcements (id, courseId, authorId, authorName, authorRole, content, attachmentsJson, isPinned, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
       [
         id,
@@ -161,7 +161,7 @@ classroomRoutes.delete('/announcements/:id', async (req: Request, res: Response)
 
     if (!row) return res.status(404).json({ message: 'Announcement not found' });
 
-    await db.query('DELETE FROM announcement_comments WHERE "announcementId" = $1', [req.params.id]);
+    await db.query('DELETE FROM announcement_comments WHERE announcementId = $1', [req.params.id]);
     await db.query('DELETE FROM announcements WHERE id = $1', [req.params.id]);
     res.json({ message: 'Announcement deleted' });
   } catch (error) {
@@ -181,7 +181,7 @@ classroomRoutes.post('/announcements/:id/pin', async (req: Request, res: Respons
 
     const next = row.isPinned ? 0 : 1;
     const now = nowIso();
-    await db.query('UPDATE announcements SET "isPinned" = $1, "updatedAt" = $2 WHERE id = $3', [next, now, req.params.id]);
+    await db.query('UPDATE announcements SET isPinned = $1, updatedAt = $2 WHERE id = $3', [next, now, req.params.id]);
     res.json({ id: req.params.id, isPinned: Boolean(next) });
   } catch (error) {
     console.error('Error pinnig announcement:', error);
@@ -208,12 +208,12 @@ classroomRoutes.post('/announcements/:id/comments', async (req: Request, res: Re
     const authorName = `${req.user!.firstName} ${req.user!.lastName}`;
 
     await db.query(
-      `INSERT INTO announcement_comments (id, "announcementId", "authorId", "authorName", "authorRole", content, "createdAt")
+      `INSERT INTO announcement_comments (id, announcementId, authorId, authorName, authorRole, content, createdAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, req.params.id, req.user!.id, authorName, req.user!.role, content, now]
     );
 
-    await db.query('UPDATE announcements SET "updatedAt" = $1 WHERE id = $2', [now, req.params.id]);
+    await db.query('UPDATE announcements SET updatedAt = $1 WHERE id = $2', [now, req.params.id]);
 
     res.status(201).json({
       id,
@@ -233,7 +233,7 @@ classroomRoutes.delete('/announcements/:id/comments/:commentId', async (req: Req
   if (!requireUser(req, res)) return;
 
   try {
-    await db.query('DELETE FROM announcement_comments WHERE id = $1 AND "announcementId" = $2', [
+    await db.query('DELETE FROM announcement_comments WHERE id = $1 AND announcementId = $2', [
       req.params.commentId,
       req.params.id
     ]);
@@ -259,7 +259,7 @@ classroomRoutes.post('/materials', async (req: Request, res: Response) => {
 
   try {
     await db.query(
-      `INSERT INTO class_materials (id, "courseId", "topicId", title, description, type, url, "createdBy", "createdByName", "createdAt", "updatedAt")
+      `INSERT INTO class_materials (id, courseId, topicId, title, description, type, url, createdBy, createdByName, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         id,
@@ -316,13 +316,13 @@ classroomRoutes.post('/topics', async (req: Request, res: Response) => {
   }
 
   try {
-    const existingResult = await db.query('SELECT COUNT(*) as c FROM class_topics WHERE "courseId" = $1', [courseId]);
+    const existingResult = await db.query('SELECT COUNT(*) as c FROM class_topics WHERE courseId = $1', [courseId]);
     const orderIndex = Number(existingResult.rows[0]?.c || 0) + 1;
 
     const id = randomUUID();
     const now = nowIso();
     await db.query(
-      'INSERT INTO class_topics (id, "courseId", name, "orderIndex", "createdAt") VALUES ($1, $2, $3, $4, $5)',
+      'INSERT INTO class_topics (id, courseId, name, orderIndex, createdAt) VALUES ($1, $2, $3, $4, $5)',
       [id, courseId, name, orderIndex, now]
     );
 
@@ -356,7 +356,7 @@ classroomRoutes.post('/topics/reorder', async (req: Request, res: Response) => {
     try {
       await client.query('BEGIN');
       for (let i = 0; i < orderedIds.length; i++) {
-        await client.query('UPDATE class_topics SET "orderIndex" = $1 WHERE id = $2 AND "courseId" = $3', [
+        await client.query('UPDATE class_topics SET orderIndex = $1 WHERE id = $2 AND courseId = $3', [
           i + 1,
           orderedIds[i],
           courseId
@@ -390,7 +390,7 @@ classroomRoutes.post('/rubrics', async (req: Request, res: Response) => {
 
   try {
     await db.query(
-      `INSERT INTO rubrics (id, "courseId", title, "criteriaJson", "createdBy", "createdAt", "updatedAt")
+      `INSERT INTO rubrics (id, courseId, title, criteriaJson, createdBy, createdAt, updatedAt)
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [id, courseId, title, JSON.stringify(criteria), req.user!.id, now, now]
     );
@@ -425,8 +425,8 @@ classroomRoutes.put('/rubrics/:id', async (req: Request, res: Response) => {
     await db.query(
       `UPDATE rubrics
        SET title = COALESCE($1, title),
-           "criteriaJson" = COALESCE($2, "criteriaJson"),
-           "updatedAt" = $3
+           criteriaJson = COALESCE($2, criteriaJson),
+           updatedAt = $3
        WHERE id = $4`,
       [title ?? null, criteria ? JSON.stringify(criteria) : null, now, req.params.id]
     );
@@ -459,7 +459,7 @@ classroomRoutes.post('/invites/generate', async (req: Request, res: Response) =>
   if (!courseId) return res.status(400).json({ message: 'courseId is required' });
 
   try {
-    const existingResult = await db.query('SELECT * FROM class_invites WHERE "courseId" = $1', [courseId]);
+    const existingResult = await db.query('SELECT * FROM class_invites WHERE courseId = $1', [courseId]);
     const existing = existingResult.rows[0];
 
     if (existing && existing.isActive) {
@@ -470,9 +470,9 @@ classroomRoutes.post('/invites/generate', async (req: Request, res: Response) =>
     const now = nowIso();
 
     await db.query(
-      `INSERT INTO class_invites ("courseId", code, "isActive", "createdAt")
+      `INSERT INTO class_invites (courseId, code, isActive, createdAt)
        VALUES ($1, $2, $3, $4)
-       ON CONFLICT("courseId") DO UPDATE SET code=excluded.code, "isActive"=excluded."isActive", "createdAt"=excluded."createdAt"`,
+       ON CONFLICT(courseId) DO UPDATE SET code=excluded.code, isActive=excluded.isActive, createdAt=excluded.createdAt`,
       [courseId, code, 1, now]
     );
 
@@ -489,7 +489,7 @@ classroomRoutes.post('/invites/disable', async (req: Request, res: Response) => 
   if (!courseId) return res.status(400).json({ message: 'courseId is required' });
 
   try {
-    await db.query('UPDATE class_invites SET "isActive" = 0 WHERE "courseId" = $1', [courseId]);
+    await db.query('UPDATE class_invites SET isActive = 0 WHERE courseId = $1', [courseId]);
     res.json({ message: 'Invite disabled' });
   } catch (error) {
     console.error('Error disabling invite:', error);
@@ -500,7 +500,7 @@ classroomRoutes.post('/invites/disable', async (req: Request, res: Response) => 
 classroomRoutes.get('/invites/:courseId', async (req: Request, res: Response) => {
   if (!requireUser(req, res)) return;
   try {
-    const rowResult = await db.query('SELECT * FROM class_invites WHERE "courseId" = $1', [req.params.courseId]);
+    const rowResult = await db.query('SELECT * FROM class_invites WHERE courseId = $1', [req.params.courseId]);
     const row = rowResult.rows[0];
 
     if (!row || !row.isActive) return res.json(null);
@@ -517,7 +517,7 @@ classroomRoutes.get('/invites/find/:code', async (req: Request, res: Response) =
   const code = String(req.params.code || '').trim().toLowerCase();
 
   try {
-    const rowResult = await db.query('SELECT * FROM class_invites WHERE LOWER(code) = $1 AND "isActive" = 1', [code]);
+    const rowResult = await db.query('SELECT * FROM class_invites WHERE LOWER(code) = $1 AND isActive = 1', [code]);
     const row = rowResult.rows[0];
 
     if (!row) return res.json(null);

@@ -23,7 +23,7 @@ coursesRoutes.get('/enrollments/me', async (req: Request, res: Response) => {
     }
 
     const result = await db.query(
-      'SELECT id, "courseId", "studentId", "studentName", "enrolledAt", status FROM enrollments WHERE "studentId" = $1 ORDER BY "enrolledAt" DESC',
+      'SELECT id, courseId, studentId, studentName, enrolledAt, status FROM enrollments WHERE studentId = $1 ORDER BY enrolledAt DESC',
       [req.user.id]
     );
 
@@ -66,7 +66,7 @@ coursesRoutes.post('/', async (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     await db.query(`
-      INSERT INTO courses (id, title, description, code, "lecturerId", "lecturerName", "enrolledCount", "maxEnrollment", status, "createdAt", "updatedAt")
+      INSERT INTO courses (id, title, description, code, lecturerId, lecturerName, enrolledCount, maxEnrollment, status, createdAt, updatedAt)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
     `, [id, title, description, code, req.user.id, `${req.user.firstName} ${req.user.lastName}`, 0, maxEnrollment, 'published', now, now]);
 
@@ -107,7 +107,7 @@ coursesRoutes.put('/:id', async (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     await db.query(`
-      UPDATE courses SET title = $1, description = $2, "maxEnrollment" = $3, "updatedAt" = $4 WHERE id = $5
+      UPDATE courses SET title = $1, description = $2, maxEnrollment = $3, updatedAt = $4 WHERE id = $5
     `, [title || course.title, description || course.description, maxEnrollment || course.maxEnrollment, now, req.params.id]);
 
     res.json({ message: 'Course updated' });
@@ -160,7 +160,7 @@ coursesRoutes.post('/:id/enroll', async (req: Request, res: Response) => {
     const now = new Date().toISOString();
 
     await db.query(`
-      INSERT INTO enrollments (id, "courseId", "studentId", "studentName", "enrolledAt", status)
+      INSERT INTO enrollments (id, courseId, studentId, studentName, enrolledAt, status)
       VALUES ($1, $2, $3, $4, $5, $6)
     `, [id, req.params.id, req.user?.id, `${req.user?.firstName} ${req.user?.lastName}`, now, 'active']);
 

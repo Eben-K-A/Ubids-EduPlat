@@ -94,8 +94,8 @@ const expandRecurringMeeting = async (baseMeeting: any, occurrences: number = 12
 
     await db.query(`
       INSERT INTO meetings (
-        id, title, description, "startTime", duration, "hostName", "hostId", "meetingCode",
-        "waitingRoomMode", "isRecurring", "recurringPattern", "hasWaitingRoom", "isPasswordProtected", "recordingEnabled", password, "createdAt", "updatedAt"
+        id, title, description, startTime, duration, hostName, hostId, meetingCode,
+        waitingRoomMode, isRecurring, recurringPattern, hasWaitingRoom, isPasswordProtected, recordingEnabled, password, createdAt, updatedAt
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     `, [
       recurringId,
@@ -226,8 +226,8 @@ meetingsRoutes.post('/', async (req: Request, res: Response) => {
 
     await db.query(`
       INSERT INTO meetings (
-        id, title, description, "startTime", duration, "hostName", "hostId", "meetingCode",
-        "waitingRoomMode", "isRecurring", "recurringPattern", "hasWaitingRoom", "isPasswordProtected", "recordingEnabled", password, "createdAt", "updatedAt"
+        id, title, description, startTime, duration, hostName, hostId, meetingCode,
+        waitingRoomMode, isRecurring, recurringPattern, hasWaitingRoom, isPasswordProtected, recordingEnabled, password, createdAt, updatedAt
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     `, [
       id,
@@ -324,7 +324,7 @@ meetingsRoutes.post('/:id/join', async (req: Request, res: Response) => {
     const identity = `guest-${randomUUID()}`;
     const now = new Date().toISOString();
     await db.query(`
-      INSERT INTO meeting_waiting_requests (id, "meetingId", name, "userId", identity, status, "createdAt", "updatedAt")
+      INSERT INTO meeting_waiting_requests (id, meetingId, name, userId, identity, status, createdAt, updatedAt)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [requestId, meeting.id, name, req.user?.id ?? null, identity, 'pending', now, now]);
 
@@ -502,16 +502,16 @@ meetingsRoutes.put('/:id', async (req: Request, res: Response) => {
       UPDATE meetings SET
         title = COALESCE($1, title),
         description = COALESCE($2, description),
-        "startTime" = COALESCE($3, "startTime"),
+        startTime = COALESCE($3, startTime),
         duration = COALESCE($4, duration),
-        "waitingRoomMode" = COALESCE($5, "waitingRoomMode"),
-        "isRecurring" = COALESCE($6, "isRecurring"),
-        "recurringPattern" = COALESCE($7, "recurringPattern"),
-        "hasWaitingRoom" = COALESCE($8, "hasWaitingRoom"),
-        "isPasswordProtected" = COALESCE($9, "isPasswordProtected"),
-        "recordingEnabled" = COALESCE($10, "recordingEnabled"),
+        waitingRoomMode = COALESCE($5, waitingRoomMode),
+        isRecurring = COALESCE($6, isRecurring),
+        recurringPattern = COALESCE($7, recurringPattern),
+        hasWaitingRoom = COALESCE($8, hasWaitingRoom),
+        isPasswordProtected = COALESCE($9, isPasswordProtected),
+        recordingEnabled = COALESCE($10, recordingEnabled),
         password = CASE WHEN $11 IS NOT NULL THEN $12 WHEN password IS NULL THEN NULL ELSE password END,
-        "updatedAt" = $13
+        updatedAt = $13
       WHERE id = $14
     `, [
       title ?? null,
@@ -560,8 +560,8 @@ meetingsRoutes.delete('/:id', async (req: Request, res: Response) => {
       return res.status(403).json({ data: null, message: 'Not authorized' });
     }
 
-    await db.query('DELETE FROM meeting_waiting_requests WHERE "meetingId" = $1', [meeting.id]);
-    await db.query('DELETE FROM meeting_recordings WHERE "meetingId" = $1', [meeting.id]);
+    await db.query('DELETE FROM meeting_waiting_requests WHERE meetingId = $1', [meeting.id]);
+    await db.query('DELETE FROM meeting_recordings WHERE meetingId = $1', [meeting.id]);
     await db.query('DELETE FROM meetings WHERE id = $1', [meeting.id]);
 
     res.json({ data: null, message: 'Meeting deleted' });
@@ -578,7 +578,7 @@ meetingsRoutes.get('/:id/recordings', async (req: Request, res: Response) => {
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
-    const rowsResult = await db.query('SELECT * FROM meeting_recordings WHERE "meetingId" = $1 ORDER BY "createdAt" DESC', [meeting.id]);
+    const rowsResult = await db.query('SELECT * FROM meeting_recordings WHERE meetingId = $1 ORDER BY createdAt DESC', [meeting.id]);
     res.json({ data: rowsResult.rows });
   } catch (error) {
     console.error('Error fetching recordings:', error);
@@ -588,7 +588,7 @@ meetingsRoutes.get('/:id/recordings', async (req: Request, res: Response) => {
 
 meetingsRoutes.post('/:id/recordings/start', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingCode = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
@@ -596,7 +596,7 @@ meetingsRoutes.post('/:id/recordings/start', async (req: Request, res: Response)
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const activeResult = await db.query('SELECT * FROM meeting_recordings WHERE "meetingId" = $1 AND status = $2', [meeting.id, 'recording']);
+    const activeResult = await db.query('SELECT * FROM meeting_recordings WHERE meetingId = $1 AND status = $2', [meeting.id, 'recording']);
     const active = activeResult.rows[0];
 
     if (active) return res.status(400).json({ message: 'Recording already in progress' });
@@ -652,7 +652,7 @@ meetingsRoutes.post('/:id/recordings/start', async (req: Request, res: Response)
 
     const egressId = (egress as any)?.egressId;
     await db.query(`
-      INSERT INTO meeting_recordings (id, "meetingId", "egressId", status, "startedAt", "recordingUrl", "createdAt", "updatedAt")
+      INSERT INTO meeting_recordings (id, meetingId, egressId, status, startedAt, recordingUrl, createdAt, updatedAt)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [id, meeting.id, egressId ?? null, 'recording', now, recordingUrl, now, now]);
 
@@ -674,8 +674,8 @@ meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Respon
     const pmResult = await db.query(`
       SELECT pm.*, m.* 
       FROM personal_meetings pm 
-      JOIN meetings m ON pm."meetingId" = m.id 
-      WHERE pm."userId" = $1
+      JOIN meetings m ON pm.meetingId = m.id 
+      WHERE pm.userId = $1
     `, [req.user.id]);
 
     let personalMeeting = pmResult.rows[0];
@@ -728,7 +728,7 @@ meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Respon
 
     // Create personal meeting mapping
     await db.query(`
-      INSERT INTO personal_meetings (id, "userId", "meetingId", "personalMeetingCode", "createdAt", "updatedAt")
+      INSERT INTO personal_meetings (id, userId, meetingId, personalMeetingCode, createdAt, updatedAt)
       VALUES ($1, $2, $3, $4, $5, $6)
     `, [personalMeetingId, req.user.id, meetingId, personalCode, now, now]);
 
@@ -758,7 +758,7 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, re
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND "meetingId" = $2', [req.params.recordingId, meeting.id]);
+    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND meetingId = $2', [req.params.recordingId, meeting.id]);
     const recording = recordingResult.rows[0];
 
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
@@ -775,8 +775,8 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, re
 
     await db.query(`
       UPDATE meeting_recordings
-      SET status = 'completed', "stoppedAt" = $1, "updatedAt" = $2
-      WHERE id = $3 AND "meetingId" = $4
+      SET status = 'completed', stoppedAt = $1, updatedAt = $2
+      WHERE id = $3 AND meetingId = $4
     `, [now, now, req.params.recordingId, meeting.id]);
 
     res.json({ data: { status: 'completed', stoppedAt: now, recordingUrl: recording.recordingUrl } });
@@ -796,7 +796,7 @@ meetingsRoutes.delete('/:id/recordings/:recordingId', async (req: Request, res: 
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND "meetingId" = $2', [req.params.recordingId, meeting.id]);
+    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND meetingId = $2', [req.params.recordingId, meeting.id]);
     const recording = recordingResult.rows[0];
 
     if (!recording) return res.status(404).json({ message: 'Recording not found' });

@@ -12,24 +12,24 @@ discussionsRoutes.get('/', async (req: Request, res: Response) => {
     try {
         let query = `
             SELECT p.*, 
-            u."firstName", u."lastName", u.avatar,
-            (SELECT COUNT(*) FROM post_comments pc WHERE pc."postId" = p.id) as "commentCount",
-            (SELECT COUNT(*) FROM post_likes pl WHERE pl."postId" = p.id) as "likeCount",
-            (SELECT COUNT(*) FROM post_likes pl WHERE pl."postId" = p.id AND pl."userId" = $1) as "isLiked"
+            u.firstName, u.lastName, u.avatar,
+            (SELECT COUNT(*) FROM post_comments pc WHERE pc.postId = p.id) as "commentCount",
+            (SELECT COUNT(*) FROM post_likes pl WHERE pl.postId = p.id) as "likeCount",
+            (SELECT COUNT(*) FROM post_likes pl WHERE pl.postId = p.id AND pl.userId = $1) as "isLiked"
             FROM posts p
-            JOIN users u ON p."authorId" = u.id
+            JOIN users u ON p.authorId = u.id
         `;
 
         const params: any[] = [userId || ''];
 
         if (courseId) {
-            query += ` WHERE p."courseId" = $2`;
+            query += ` WHERE p.courseId = $2`;
             params.push(courseId);
         } else {
-            query += ` WHERE p."courseId" IS NULL`; // General discussions
+            query += ` WHERE p.courseId IS NULL`; // General discussions
         }
 
-        query += ` ORDER BY p."isPinned" DESC, p."createdAt" DESC`;
+        query += ` ORDER BY p.isPinned DESC, p.createdAt DESC`;
 
         const result = await db.query(query, params);
         const posts = result.rows;
@@ -67,15 +67,15 @@ discussionsRoutes.get('/:id', async (req: Request, res: Response) => {
 
     try {
         // Increment view count
-        await db.query('UPDATE posts SET "viewCount" = "viewCount" + 1 WHERE id = $1', [postId]);
+        await db.query('UPDATE posts SET viewCount = viewCount + 1 WHERE id = $1', [postId]);
 
         const postResult = await db.query(`
             SELECT p.*, 
-            u."firstName", u."lastName", u.avatar,
-            (SELECT COUNT(*) FROM post_likes pl WHERE pl."postId" = p.id) as "likeCount",
-            (SELECT COUNT(*) FROM post_likes pl WHERE pl."postId" = p.id AND pl."userId" = $1) as "isLiked"
+            u.firstName, u.lastName, u.avatar,
+            (SELECT COUNT(*) FROM post_likes pl WHERE pl.postId = p.id) as "likeCount",
+            (SELECT COUNT(*) FROM post_likes pl WHERE pl.postId = p.id AND pl.userId = $1) as "isLiked"
             FROM posts p
-            JOIN users u ON p."authorId" = u.id
+            JOIN users u ON p.authorId = u.id
             WHERE p.id = $2
         `, [userId || '', postId]);
 
@@ -84,11 +84,11 @@ discussionsRoutes.get('/:id', async (req: Request, res: Response) => {
         if (!post) return res.status(404).json({ error: 'Post not found' });
 
         const commentsResult = await db.query(`
-            SELECT c.*, u."firstName", u."lastName", u.avatar
+            SELECT c.*, u.firstName, u.lastName, u.avatar
             FROM post_comments c
-            JOIN users u ON c."authorId" = u.id
-            WHERE c."postId" = $1
-            ORDER BY c."createdAt" ASC
+            JOIN users u ON c.authorId = u.id
+            WHERE c.postId = $1
+            ORDER BY c.createdAt ASC
         `, [postId]);
 
         const comments = commentsResult.rows;
@@ -141,7 +141,7 @@ discussionsRoutes.post('/', async (req: Request, res: Response) => {
         const now = new Date().toISOString();
 
         await db.query(`
-            INSERT INTO posts (id, "courseId", "authorId", title, content, "createdAt", "updatedAt")
+            INSERT INTO posts (id, courseId, authorId, title, content, createdAt, updatedAt)
             VALUES ($1, $2, $3, $4, $5, $6, $7)
         `, [id, courseId || null, userId, title, content, now, now]);
 
@@ -166,12 +166,12 @@ discussionsRoutes.post('/:id/comments', async (req: Request, res: Response) => {
         const now = new Date().toISOString();
 
         await db.query(`
-            INSERT INTO post_comments (id, "postId", "authorId", content, "createdAt", "updatedAt")
+            INSERT INTO post_comments (id, postId, authorId, content, createdAt, updatedAt)
             VALUES ($1, $2, $3, $4, $5, $6)
         `, [id, postId, userId, content, now, now]);
 
         // Update post updatedAt
-        await db.query('UPDATE posts SET "updatedAt" = $1 WHERE id = $2', [now, postId]);
+        await db.query('UPDATE posts SET updatedAt = $1 WHERE id = $2', [now, postId]);
 
         res.json({ id, message: 'Comment added successfully' });
     } catch (error: any) {
@@ -188,14 +188,14 @@ discussionsRoutes.post('/:id/like', async (req: Request, res: Response) => {
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
-        const existingResult = await db.query('SELECT 1 FROM post_likes WHERE "postId" = $1 AND "userId" = $2', [postId, userId]);
+        const existingResult = await db.query('SELECT 1 FROM post_likes WHERE postId = $1 AND userId = $2', [postId, userId]);
         const existing = existingResult.rows[0];
 
         if (existing) {
-            await db.query('DELETE FROM post_likes WHERE "postId" = $1 AND "userId" = $2', [postId, userId]);
+            await db.query('DELETE FROM post_likes WHERE postId = $1 AND userId = $2', [postId, userId]);
             res.json({ liked: false });
         } else {
-            await db.query('INSERT INTO post_likes ("postId", "userId", "createdAt") VALUES ($1, $2, $3)', [postId, userId, new Date().toISOString()]);
+            await db.query('INSERT INTO post_likes (postId, userId, createdAt) VALUES ($1, $2, $3)', [postId, userId, new Date().toISOString()]);
             res.json({ liked: true });
         }
     } catch (error: any) {

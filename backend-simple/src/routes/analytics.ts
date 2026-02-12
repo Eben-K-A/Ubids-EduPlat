@@ -13,10 +13,10 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
 
             // 1. Total Students (unique students in their courses)
             const totalStudentsQuery = await db.query(`
-        SELECT COUNT(DISTINCT e."studentId") as count
+        SELECT COUNT(DISTINCT e.studentId) as count
         FROM enrollments e
-        JOIN courses c ON e."courseId" = c.id
-        WHERE c."lecturerId" = $1
+        JOIN courses c ON e.courseId = c.id
+        WHERE c.lecturerId = $1
       `, [userId]);
             const totalStudents = totalStudentsQuery.rows[0];
 
@@ -24,7 +24,7 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
             const activeCoursesQuery = await db.query(`
         SELECT COUNT(*) as count
         FROM courses
-        WHERE "lecturerId" = $1 AND status = 'published'
+        WHERE lecturerId = $1 AND status = 'published'
       `, [userId]);
             const activeCourses = activeCoursesQuery.rows[0];
 
@@ -32,9 +32,9 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
             const totalSubmissionsQuery = await db.query(`
         SELECT COUNT(s.id) as count
         FROM submissions s
-        JOIN assignments a ON s."assignmentId" = a.id
-        JOIN courses c ON a."courseId" = c.id
-        WHERE c."lecturerId" = $1
+        JOIN assignments a ON s.assignmentId = a.id
+        JOIN courses c ON a.courseId = c.id
+        WHERE c.lecturerId = $1
       `, [userId]);
             const totalSubmissions = totalSubmissionsQuery.rows[0];
 
@@ -42,20 +42,20 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
             const totalQuizAttemptsQuery = await db.query(`
         SELECT COUNT(qa.id) as count
         FROM quiz_attempts qa
-        JOIN quizzes q ON qa."quizId" = q.id
-        JOIN courses c ON q."courseId" = c.id
-        WHERE c."lecturerId" = $1 AND qa.status = 'completed'
+        JOIN quizzes q ON qa.quizId = q.id
+        JOIN courses c ON q.courseId = c.id
+        WHERE c.lecturerId = $1 AND qa.status = 'completed'
       `, [userId]);
             const totalQuizAttempts = totalQuizAttemptsQuery.rows[0];
 
             // 5. Course Performance
             const coursePerformanceQuery = await db.query(`
-        SELECT c.code as name, c."enrolledCount" as students, AVG(qa.score) as "avgScore"
+        SELECT c.code as name, c.enrolledCount as students, AVG(qa.score) as "avgScore"
         FROM courses c
-        LEFT JOIN quizzes q ON c.id = q."courseId"
-        LEFT JOIN quiz_attempts qa ON q.id = qa."quizId"
-        WHERE c."lecturerId" = $1
-        GROUP BY c.id, c.code, c."enrolledCount"
+        LEFT JOIN quizzes q ON c.id = q.courseId
+        LEFT JOIN quiz_attempts qa ON q.id = qa.quizId
+        WHERE c.lecturerId = $1
+        GROUP BY c.id, c.code, c.enrolledCount
         LIMIT 5
        `, [userId]);
             const coursePerformance = coursePerformanceQuery.rows;
@@ -99,7 +99,7 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
             const enrolledCoursesQuery = await db.query(`
         SELECT COUNT(*) as count
         FROM enrollments
-        WHERE "studentId" = $1 AND status = 'active'
+        WHERE studentId = $1 AND status = 'active'
       `, [userId]);
             const enrolledCourses = enrolledCoursesQuery.rows[0];
 
@@ -108,13 +108,13 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
 
             // 3. Total Submissions by Student
             const mySubmissionsQuery = await db.query(`
-        SELECT COUNT(*) as count FROM submissions WHERE "studentId" = $1
+        SELECT COUNT(*) as count FROM submissions WHERE studentId = $1
       `, [userId]);
             const mySubmissions = mySubmissionsQuery.rows[0];
 
             // 4. Total Quiz Attempts by Student
             const myQuizAttemptsQuery = await db.query(`
-        SELECT COUNT(*) as count FROM quiz_attempts WHERE "studentId" = $1 AND status = 'completed'
+        SELECT COUNT(*) as count FROM quiz_attempts WHERE studentId = $1 AND status = 'completed'
       `, [userId]);
             const myQuizAttempts = myQuizAttemptsQuery.rows[0];
 
@@ -122,8 +122,8 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
             const myCoursesQuery = await db.query(`
         SELECT c.title as course, c.id
         FROM enrollments e
-        JOIN courses c ON e."courseId" = c.id
-        WHERE e."studentId" = $1
+        JOIN courses c ON e.courseId = c.id
+        WHERE e.studentId = $1
       `, [userId]);
             const myCourses = myCoursesQuery.rows;
 
@@ -132,8 +132,8 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
                 const completedAssignmentsResult = await db.query(`
             SELECT COUNT(*) as count 
             FROM submissions s
-            JOIN assignments a ON s."assignmentId" = a.id
-            WHERE s."studentId" = $1 AND a."courseId" = $2
+            JOIN assignments a ON s.assignmentId = a.id
+            WHERE s.studentId = $1 AND a.courseId = $2
           `, [userId, course.id]);
                 const completedAssignments = completedAssignmentsResult.rows[0];
 
@@ -141,8 +141,8 @@ analyticsRoutes.get('/stats', async (req: any, res) => {
                 const completedQuizzesResult = await db.query(`
             SELECT COUNT(*) as count 
             FROM quiz_attempts qa
-            JOIN quizzes q ON qa."quizId" = q.id
-            WHERE qa."studentId" = $1 AND q."courseId" = $2 AND qa.status = 'completed'
+            JOIN quizzes q ON qa.quizId = q.id
+            WHERE qa.studentId = $1 AND q.courseId = $2 AND qa.status = 'completed'
           `, [userId, course.id]);
                 const completedQuizzes = completedQuizzesResult.rows[0];
 

@@ -6,7 +6,7 @@ export const usersRoutes = Router();
 // Get current user profile
 usersRoutes.get('/profile', async (req: Request, res: Response) => {
   try {
-    const result = await db.query('SELECT id, email, "firstName", "lastName", role, "createdAt", "updatedAt" FROM users WHERE id = $1', [req.user?.id]);
+    const result = await db.query('SELECT id, email, firstName, lastName, role, createdAt, updatedAt FROM users WHERE id = $1', [req.user?.id]);
     const user = result.rows[0];
 
     if (!user) {
@@ -26,14 +26,14 @@ usersRoutes.put('/profile', async (req: Request, res: Response) => {
     const { firstName, lastName } = req.body;
 
     const now = new Date().toISOString();
-    await db.query('UPDATE users SET "firstName" = $1, "lastName" = $2, "updatedAt" = $3 WHERE id = $4', [
+    await db.query('UPDATE users SET firstName = $1, lastName = $2, updatedAt = $3 WHERE id = $4', [
       firstName,
       lastName,
       now,
       req.user?.id
     ]);
 
-    const result = await db.query('SELECT id, email, "firstName", "lastName", role, "createdAt", "updatedAt" FROM users WHERE id = $1', [req.user?.id]);
+    const result = await db.query('SELECT id, email, firstName, lastName, role, createdAt, updatedAt FROM users WHERE id = $1', [req.user?.id]);
     const user = result.rows[0];
 
     res.json(user);
@@ -50,7 +50,7 @@ usersRoutes.get('/', async (req: Request, res: Response) => {
       return res.status(403).json({ message: 'Admin only' });
     }
 
-    const result = await db.query('SELECT id, email, "firstName", "lastName", role, "createdAt", "updatedAt" FROM users ORDER BY "createdAt" DESC');
+    const result = await db.query('SELECT id, email, firstName, lastName, role, createdAt, updatedAt FROM users ORDER BY createdAt DESC');
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching users:', error);
