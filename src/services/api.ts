@@ -1,3 +1,5 @@
+import { Conversation, Message, User, Post } from "@/types";
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || "/api/v1";
 
 export interface ApiResponse<T> {
@@ -132,7 +134,7 @@ export const usersApi = {
 
   list: (params?: Record<string, any>) => {
     const query = new URLSearchParams(params).toString();
-    return ApiClient.get(`/users${query ? `?${query}` : ""}`);
+    return ApiClient.get<User[]>(`/users${query ? `?${query}` : ""}`);
   },
 };
 
@@ -154,6 +156,9 @@ export const coursesApi = {
 
   delete: (id: string) =>
     ApiClient.delete(`/courses/${id}`),
+
+  myEnrollments: () =>
+    ApiClient.get("/courses/enrollments/me"),
 
   enroll: (id: string) =>
     ApiClient.post(`/courses/${id}/enroll`, {}),
@@ -192,6 +197,105 @@ export const assignmentsApi = {
       `/assignments/${id}/submissions/${submissionId}/grade`,
       gradeData
     ),
+};
+
+// Modules API
+export const modulesApi = {
+  list: (courseId?: string) => {
+    const query = courseId ? `?courseId=${courseId}` : "";
+    return ApiClient.get(`/modules${query}`);
+  },
+
+  createModule: (data: any) =>
+    ApiClient.post("/modules", data),
+
+  updateModule: (id: string, data: any) =>
+    ApiClient.put(`/modules/${id}`, data),
+
+  deleteModule: (id: string) =>
+    ApiClient.delete(`/modules/${id}`),
+
+  addLesson: (moduleId: string, data: any) =>
+    ApiClient.post(`/modules/${moduleId}/lessons`, data),
+
+  updateLesson: (moduleId: string, lessonId: string, data: any) =>
+    ApiClient.put(`/modules/${moduleId}/lessons/${lessonId}`, data),
+
+  deleteLesson: (moduleId: string, lessonId: string) =>
+    ApiClient.delete(`/modules/${moduleId}/lessons/${lessonId}`),
+};
+
+// Quizzes API
+export const quizzesApi = {
+  list: (courseId?: string) => {
+    const query = courseId ? `?courseId=${courseId}` : "";
+    return ApiClient.get(`/quizzes${query}`);
+  },
+
+  getById: (id: string) =>
+    ApiClient.get(`/quizzes/${id}`),
+
+  create: (data: any) =>
+    ApiClient.post("/quizzes", data),
+
+  update: (id: string, data: any) =>
+    ApiClient.put(`/quizzes/${id}`, data),
+
+  delete: (id: string) =>
+    ApiClient.delete(`/quizzes/${id}`),
+
+  startAttempt: (quizId: string) =>
+    ApiClient.post(`/quizzes/${quizId}/attempts`, {}),
+
+  submitAttempt: (attemptId: string, answers: any[]) =>
+    ApiClient.post(`/quizzes/attempts/${attemptId}/submit`, { answers }),
+};
+
+// Classroom API
+export const classroomApi = {
+  state: (courseId?: string) => {
+    const query = courseId ? `?courseId=${courseId}` : "";
+    return ApiClient.get(`/classroom/state${query}`);
+  },
+
+  // Announcements
+  createAnnouncement: (data: any) => ApiClient.post("/classroom/announcements", data),
+  deleteAnnouncement: (id: string) => ApiClient.delete(`/classroom/announcements/${id}`),
+  togglePin: (id: string) => ApiClient.post(`/classroom/announcements/${id}/pin`, {}),
+  addComment: (announcementId: string, data: any) =>
+    ApiClient.post(`/classroom/announcements/${announcementId}/comments`, data),
+  deleteComment: (announcementId: string, commentId: string) =>
+    ApiClient.delete(`/classroom/announcements/${announcementId}/comments/${commentId}`),
+
+  // Materials
+  addMaterial: (data: any) => ApiClient.post("/classroom/materials", data),
+  deleteMaterial: (id: string) => ApiClient.delete(`/classroom/materials/${id}`),
+
+  // Topics
+  createTopic: (data: any) => ApiClient.post("/classroom/topics", data),
+  deleteTopic: (id: string) => ApiClient.delete(`/classroom/topics/${id}`),
+  reorderTopics: (data: any) => ApiClient.post("/classroom/topics/reorder", data),
+
+  // Rubrics
+  createRubric: (data: any) => ApiClient.post("/classroom/rubrics", data),
+  updateRubric: (id: string, data: any) => ApiClient.put(`/classroom/rubrics/${id}`, data),
+  deleteRubric: (id: string) => ApiClient.delete(`/classroom/rubrics/${id}`),
+
+  // Invites
+  generateInvite: (courseId: string) => ApiClient.post("/classroom/invites/generate", { courseId }),
+  disableInvite: (courseId: string) => ApiClient.post("/classroom/invites/disable", { courseId }),
+  getInvite: (courseId: string) => ApiClient.get(`/classroom/invites/${courseId}`),
+  findCourseByCode: (code: string) => ApiClient.get(`/classroom/invites/find/${code}`),
+};
+
+// Notifications API
+export const notificationsApi = {
+  list: () => ApiClient.get("/notifications"),
+  create: (data: { title: string; message: string; type: string; link?: string }) =>
+    ApiClient.post("/notifications", data),
+  markRead: (id: string) => ApiClient.post(`/notifications/${id}/read`, {}),
+  markAllRead: () => ApiClient.post("/notifications/read-all", {}),
+  delete: (id: string) => ApiClient.delete(`/notifications/${id}`),
 };
 
 // Meetings API
@@ -242,4 +346,75 @@ export const meetingsApi = {
     ApiClient.get("/meetings/personal-meeting/current"),
 };
 
-// Add more API endpoints as needed
+// Messages API
+export const messagesApi = {
+  listConversations: () => ApiClient.get<Conversation[]>("/messages/conversations"),
+
+  createConversation: (data: { type: string; participantIds: string[]; name?: string }) =>
+    ApiClient.post<Conversation>("/messages/conversations", data),
+
+  getMessages: (conversationId: string) =>
+    ApiClient.get<Message[]>(`/messages/conversations/${conversationId}/messages`),
+
+  sendMessage: (conversationId: string, data: { content: string; type?: string; replyToId?: string; voiceDuration?: string }) =>
+    ApiClient.post<Message>(`/messages/conversations/${conversationId}/messages`, data),
+
+  markConversationRead: (conversationId: string) =>
+    ApiClient.post<{ success: boolean }>(`/messages/conversations/${conversationId}/read`, {}),
+
+  reactToMessage: (messageId: string, emoji: string) =>
+    ApiClient.post<{ success: boolean }>(`/messages/messages/${messageId}/react`, { emoji }),
+};
+
+// Discussions API
+export const discussionsApi = {
+  list: (courseId?: string) =>
+    ApiClient.get<Post[]>(`/discussions${courseId ? `?courseId=${courseId}` : ""}`),
+
+  get: (id: string) =>
+    ApiClient.get<Post>(`/discussions/${id}`),
+
+  create: (data: { title: string; content: string; courseId?: string }) =>
+    ApiClient.post<{ id: string; message: string }>("/discussions", data),
+
+  addComment: (postId: string, content: string) =>
+    ApiClient.post<{ id: string; message: string }>(`/discussions/${postId}/comments`, { content }),
+
+
+  toggleLike: (postId: string) =>
+    ApiClient.post<{ liked: boolean }>(`/discussions/${postId}/like`, {}),
+};
+
+// Files API
+export const filesApi = {
+  upload: (file: File, courseId?: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (courseId) formData.append('courseId', courseId);
+
+    // Custom request for multipart/form-data
+    return fetch(`${API_BASE_URL}/files/upload`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${localStorage.getItem("access_token")}`,
+      },
+      body: formData,
+    }).then(async (res) => {
+      if (!res.ok) throw new Error("Failed to upload file");
+      return res.json();
+    });
+  },
+
+  list: (courseId?: string) =>
+    ApiClient.get<any[]>(`/files${courseId ? `?courseId=${courseId}` : ""}`),
+
+  delete: (id: string) =>
+    ApiClient.delete(`/files/${id}`),
+};
+
+
+// Analytics API
+export const analyticsApi = {
+  getStats: () => ApiClient.get<any>("/analytics/stats"),
+};
+

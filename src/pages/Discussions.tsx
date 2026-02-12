@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePosts, useCreatePost, useToggleLike, useCourses, usePost, useAddComment } from "@/hooks/useApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -25,6 +26,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import {
   MessageSquare,
   Plus,
@@ -34,27 +37,13 @@ import {
   Users,
   Clock,
   MessageCircle,
-  Award,
   ArrowUp,
+  Loader2,
+  ArrowRight
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-
-interface Discussion {
-  id: string;
-  title: string;
-  content: string;
-  courseId: string;
-  courseName: string;
-  author: string;
-  authorRole: string;
-  createdAt: Date;
-  replies: number;
-  upvotes: number;
-  isPinned: boolean;
-  tags: string[];
-  lastActivity: Date;
-}
+import { Post, Comment } from "@/types";
 
 interface GroupProject {
   id: string;
@@ -67,69 +56,6 @@ interface GroupProject {
   status: "in-progress" | "submitted" | "graded";
   tasks: { id: string; title: string; assignee: string; done: boolean }[];
 }
-
-const mockDiscussions: Discussion[] = [
-  {
-    id: "d1",
-    title: "Help with recursion assignment",
-    content: "I'm struggling with the recursive Fibonacci implementation. Can someone explain the base cases?",
-    courseId: "course-1",
-    courseName: "CS101",
-    author: "Jane Doe",
-    authorRole: "student",
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    replies: 5,
-    upvotes: 12,
-    isPinned: false,
-    tags: ["help", "recursion"],
-    lastActivity: new Date(Date.now() - 30 * 60 * 1000),
-  },
-  {
-    id: "d2",
-    title: "📌 Midterm Exam Study Guide",
-    content: "Here's a comprehensive study guide for the upcoming midterm. Please review chapters 1-5.",
-    courseId: "course-1",
-    courseName: "CS101",
-    author: "Prof. John Lecturer",
-    authorRole: "lecturer",
-    createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-    replies: 18,
-    upvotes: 32,
-    isPinned: true,
-    tags: ["announcement", "exam"],
-    lastActivity: new Date(Date.now() - 60 * 60 * 1000),
-  },
-  {
-    id: "d3",
-    title: "Best practices for CSS Grid vs Flexbox?",
-    content: "When should we use Grid vs Flexbox? I find myself always defaulting to Flexbox.",
-    courseId: "course-2",
-    courseName: "WEB201",
-    author: "Alex Chen",
-    authorRole: "student",
-    createdAt: new Date(Date.now() - 5 * 60 * 60 * 1000),
-    replies: 8,
-    upvotes: 15,
-    isPinned: false,
-    tags: ["css", "discussion"],
-    lastActivity: new Date(Date.now() - 2 * 60 * 60 * 1000),
-  },
-  {
-    id: "d4",
-    title: "SQL JOIN types - visual explanation needed",
-    content: "Can someone share a visual representation of different JOIN types? The textbook explanation isn't clicking.",
-    courseId: "course-3",
-    courseName: "DB301",
-    author: "Sam Wilson",
-    authorRole: "student",
-    createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
-    replies: 3,
-    upvotes: 7,
-    isPinned: false,
-    tags: ["sql", "help"],
-    lastActivity: new Date(Date.now() - 12 * 60 * 60 * 1000),
-  },
-];
 
 const mockGroupProjects: GroupProject[] = [
   {
@@ -182,25 +108,73 @@ export default function Discussions() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [discussions, setDiscussions] = useState(mockDiscussions);
+  const [selectedCourse, setSelectedCourse] = useState<string | undefined>(undefined);
 
-  const filteredDiscussions = discussions
+  // Form State
+  const [newPostTitle, setNewPostTitle] = useState("");
+  const [newPostContent, setNewPostContent] = useState("");
+  const [newPostCourseId, setNewPostCourseId] = useState<string | undefined>(undefined);
+
+  // Post Details State
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
+  const [commentContent, setCommentContent] = useState("");
+
+  // API Hooks
+  const { data: posts = [], isLoading, refetch } = usePosts(selectedCourse);
+  const { mutate: createPost, isPending: isCreating } = useCreatePost();
+  const { mutate: toggleLike } = useToggleLike();
+  const { data: courses = [] } = useCourses(); // For course selection
+  const { data: selectedPost, isLoading: isLoadingPost } = usePost(selectedPostId || "");
+  const { mutate: addComment, isPending: isAddingComment } = useAddComment();
+
+  const filteredDiscussions = posts
     .filter((d) => d.title.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
-      return b.lastActivity.getTime() - a.lastActivity.getTime();
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
   const handleCreatePost = () => {
-    toast.success("Discussion posted! (Mock)");
-    setCreateOpen(false);
+    if (!newPostTitle || !newPostContent) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    createPost(
+      { title: newPostTitle, content: newPostContent, courseId: newPostCourseId },
+      {
+        onSuccess: () => {
+          toast.success("Discussion posted successfully!");
+          setCreateOpen(false);
+          setNewPostTitle("");
+          setNewPostContent("");
+          setNewPostCourseId(undefined);
+          refetch();
+        },
+        onError: () => {
+          toast.error("Failed to post discussion");
+        },
+      }
+    );
   };
 
   const handleUpvote = (id: string) => {
-    setDiscussions((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, upvotes: d.upvotes + 1 } : d))
-    );
+    toggleLike(id);
+  };
+
+  const handleAddComment = () => {
+    if (!selectedPostId || !commentContent.trim()) return;
+
+    addComment({ postId: selectedPostId, content: commentContent }, {
+      onSuccess: () => {
+        toast.success("Comment added!");
+        setCommentContent("");
+      },
+      onError: () => {
+        toast.error("Failed to add comment");
+      }
+    });
   };
 
   return (
@@ -210,7 +184,7 @@ export default function Discussions() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Collaboration</h1>
             <p className="text-muted-foreground">
-              Discuss topics, work on group projects, and collaborate with peers
+              Discuss topics, ask questions, and collaborate with your peers
             </p>
           </div>
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -220,41 +194,52 @@ export default function Discussions() {
                 New Discussion
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[525px]">
               <DialogHeader>
                 <DialogTitle>Start a Discussion</DialogTitle>
                 <DialogDescription>Ask a question or share something with your class</DialogDescription>
               </DialogHeader>
-              <div className="space-y-4">
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label>Course</Label>
-                  <Select>
+                  <Label>Course (Optional)</Label>
+                  <Select onValueChange={setNewPostCourseId} value={newPostCourseId}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select course" />
+                      <SelectValue placeholder="Select course (or General)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="course-1">CS101</SelectItem>
-                      <SelectItem value="course-2">WEB201</SelectItem>
-                      <SelectItem value="course-3">DB301</SelectItem>
+                      <SelectItem value="general">General Discussion</SelectItem>
+                      {courses.map(course => (
+                        <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Title</Label>
-                  <Input placeholder="What's your question or topic?" />
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    placeholder="What's your question or topic?"
+                    value={newPostTitle}
+                    onChange={(e) => setNewPostTitle(e.target.value)}
+                  />
                 </div>
                 <div className="space-y-2">
-                  <Label>Content</Label>
-                  <Textarea placeholder="Describe your question or topic in detail..." className="min-h-[120px]" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Tags</Label>
-                  <Input placeholder="e.g., help, discussion, announcement (comma-separated)" />
+                  <Label htmlFor="content">Content</Label>
+                  <Textarea
+                    id="content"
+                    placeholder="Describe your question or topic in detail..."
+                    className="min-h-[120px]"
+                    value={newPostContent}
+                    onChange={(e) => setNewPostContent(e.target.value)}
+                  />
                 </div>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-                <Button onClick={handleCreatePost}>Post</Button>
+                <Button onClick={handleCreatePost} disabled={isCreating}>
+                  {isCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Post
+                </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -273,70 +258,105 @@ export default function Discussions() {
           </TabsList>
 
           <TabsContent value="discussions" className="space-y-4 mt-4">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search discussions..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex gap-4">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search discussions..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <Select
+                value={selectedCourse || "all"}
+                onValueChange={(val) => setSelectedCourse(val === "all" ? undefined : val)}
+              >
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Filter by Course" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Courses</SelectItem>
+                  {courses.map(course => (
+                    <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            <div className="space-y-3">
-              {filteredDiscussions.map((discussion) => (
-                <Card key={discussion.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardContent className="p-4">
-                    <div className="flex gap-4">
-                      {/* Votes */}
-                      <div className="flex flex-col items-center gap-1 min-w-[48px]">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleUpvote(discussion.id)}
-                        >
-                          <ArrowUp className="h-4 w-4" />
-                        </Button>
-                        <span className="text-sm font-semibold">{discussion.upvotes}</span>
-                      </div>
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredDiscussions.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                No discussions found. Be the first to start one!
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredDiscussions.map((discussion) => (
+                  <Card
+                    key={discussion.id}
+                    className="hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => setSelectedPostId(discussion.id)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex gap-4">
+                        {/* Votes */}
+                        <div className="flex flex-col items-center gap-1 min-w-[48px]">
+                          <Button
+                            variant={discussion.isLiked ? "default" : "ghost"}
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleUpvote(discussion.id);
+                            }}
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <span className="text-sm font-semibold">{discussion.likeCount}</span>
+                        </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start gap-2 mb-1">
-                          {discussion.isPinned && <Pin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />}
-                          <h3 className="font-semibold text-sm">{discussion.title}</h3>
-                        </div>
-                        <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                          {discussion.content}
-                        </p>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant="outline" className="text-xs">{discussion.courseName}</Badge>
-                          {discussion.tags.map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                          ))}
-                          <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
-                            <Avatar className="h-4 w-4">
-                              <AvatarFallback className="text-[8px]">
-                                {discussion.author.split(" ").map((n) => n[0]).join("")}
-                              </AvatarFallback>
-                            </Avatar>
-                            {discussion.author}
-                          </span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <MessageCircle className="h-3 w-3" />
-                            {discussion.replies}
-                          </span>
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {formatDistanceToNow(discussion.lastActivity, { addSuffix: true })}
-                          </span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-2 mb-1">
+                            {discussion.isPinned && <Pin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />}
+                            <h3 className="font-semibold text-sm">{discussion.title}</h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                            {discussion.content}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            {discussion.courseId && (
+                              <Badge variant="outline" className="text-xs">
+                                {courses.find(c => c.id === discussion.courseId)?.title || "Course"}
+                              </Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
+                              <Avatar className="h-4 w-4">
+                                <AvatarImage src={discussion.author.avatar} />
+                                <AvatarFallback className="text-[8px]">
+                                  {discussion.author.name.split(" ").map((n) => n[0]).join("")}
+                                </AvatarFallback>
+                              </Avatar>
+                              {discussion.author.name}
+                            </span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <MessageCircle className="h-3 w-3" />
+                              {discussion.commentCount || 0}
+                            </span>
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {formatDistanceToNow(new Date(discussion.createdAt), { addSuffix: true })}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="groups" className="space-y-4 mt-4">
@@ -412,6 +432,88 @@ export default function Discussions() {
             ))}
           </TabsContent>
         </Tabs>
+
+        {/* Post Details Dialog */}
+        <Dialog open={!!selectedPostId} onOpenChange={(open) => !open && setSelectedPostId(null)}>
+          <DialogContent className="sm:max-w-[700px] h-[80vh] flex flex-col p-0 gap-0">
+            {selectedPost ? (
+              <>
+                <DialogHeader className="p-6 pb-2">
+                  <div className="flex items-start gap-4">
+                    <div className="flex-1">
+                      <DialogTitle className="text-xl mb-2">{selectedPost.title}</DialogTitle>
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Avatar className="h-6 w-6">
+                          <AvatarImage src={selectedPost.author.avatar} />
+                          <AvatarFallback>{selectedPost.author.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <span>{selectedPost.author.name}</span>
+                        <span>•</span>
+                        <span>{formatDistanceToNow(new Date(selectedPost.createdAt), { addSuffix: true })}</span>
+                      </div>
+                    </div>
+                    {selectedPost.courseId && <Badge variant="outline">{courses.find(c => c.id === selectedPost.courseId)?.title}</Badge>}
+                  </div>
+                </DialogHeader>
+
+                <ScrollArea className="flex-1 p-6 pt-2">
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap mb-6">
+                    {selectedPost.content}
+                  </div>
+
+                  <Separator className="my-4" />
+
+                  <h3 className="font-semibold mb-4 flex items-center gap-2">
+                    <MessageCircle className="h-4 w-4" />
+                    Comments ({selectedPost.comments?.length || 0})
+                  </h3>
+
+                  <div className="space-y-4">
+                    {selectedPost.comments?.map((comment) => (
+                      <div key={comment.id} className="flex gap-3">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={comment.author.avatar} />
+                          <AvatarFallback>{comment.author.name.charAt(0)}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 bg-muted/50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-xs">{comment.author.name}</span>
+                            <span className="text-xs text-muted-foreground">{formatDistanceToNow(new Date(comment.createdAt), { addSuffix: true })}</span>
+                          </div>
+                          <p className="text-sm">{comment.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                <div className="p-4 border-t bg-background mt-auto">
+                  <div className="flex gap-2">
+                    <Textarea
+                      placeholder="Write a comment..."
+                      value={commentContent}
+                      onChange={(e) => setCommentContent(e.target.value)}
+                      className="min-h-[40px] resize-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAddComment();
+                        }
+                      }}
+                    />
+                    <Button size="icon" onClick={handleAddComment} disabled={isAddingComment || !commentContent.trim()}>
+                      {isAddingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

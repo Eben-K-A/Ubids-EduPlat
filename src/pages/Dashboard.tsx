@@ -31,9 +31,9 @@ export default function Dashboard() {
       if (isLecturer) {
         return myCourses.some((c) => c.id === a.courseId);
       }
-      return enrollments.some((e) => e.courseId === a.courseId && e.studentId === user?.id) && 
-             a.status === "published" && 
-             isFuture(new Date(a.dueDate));
+      return enrollments.some((e) => e.courseId === a.courseId && e.studentId === user?.id) &&
+        a.status === "published" &&
+        isFuture(new Date(a.dueDate));
     })
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
     .slice(0, 3);
@@ -49,9 +49,9 @@ export default function Dashboard() {
       if (isLecturer) {
         return myCourses.some((c) => c.id === q.courseId);
       }
-      return enrollments.some((e) => e.courseId === q.courseId && e.studentId === user?.id) && 
-             q.status === "published" && 
-             !getQuizAttempt(q.id);
+      return enrollments.some((e) => e.courseId === q.courseId && e.studentId === user?.id) &&
+        q.status === "published" &&
+        !getQuizAttempt(q.id);
     })
     .slice(0, 2);
 
@@ -121,8 +121,8 @@ export default function Dashboard() {
                   ? "Create your first course"
                   : `${myCourses.filter((c) => c.status === "published").length} published`
                 : myEnrolledCourses.length === 0
-                ? "Browse and enroll"
-                : "Currently active"}
+                  ? "Browse and enroll"
+                  : "Currently active"}
             </p>
           </CardContent>
         </Card>
@@ -138,7 +138,7 @@ export default function Dashboard() {
             <div className="text-2xl font-bold">
               {isLecturer
                 ? myCourses.reduce((acc, c) => acc + c.enrolledCount, 0)
-                : courses.filter((c) => c.status === "published").length}
+                : (courses || []).filter((c) => c.status === "published").length}
             </div>
             <p className="text-xs text-muted-foreground">
               {isLecturer ? "Across all courses" : "Ready to enroll"}
@@ -155,7 +155,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {isLecturer 
+              {isLecturer
                 ? assignments.filter(a => myCourses.some(c => c.id === a.courseId)).length
                 : pendingSubmissions}
             </div>
@@ -285,7 +285,7 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-3">
                 {upcomingAssignments.map((assignment) => {
-                  const course = courses.find((c) => c.id === assignment.courseId);
+                  const course = (courses || []).find((c) => c.id === assignment.courseId);
                   const hasSubmitted = !isLecturer && getStudentSubmission(assignment.id);
                   return (
                     <div
@@ -317,7 +317,7 @@ export default function Dashboard() {
                   );
                 })}
                 {upcomingQuizzes.map((quiz) => {
-                  const course = courses.find((c) => c.id === quiz.courseId);
+                  const course = (courses || []).find((c) => c.id === quiz.courseId);
                   return (
                     <div
                       key={quiz.id}

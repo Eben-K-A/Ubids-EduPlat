@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { Assignment, AssignmentSubmission, Quiz, QuizAttempt, CourseModule, Lesson } from "@/types/assignment";
 import { useAuth } from "./AuthContext";
+import { assignmentsApi, modulesApi, quizzesApi } from "@/services/api";
 
 interface AssignmentContextType {
   assignments: Assignment[];
@@ -39,7 +40,7 @@ interface AssignmentContextType {
 
 const AssignmentContext = createContext<AssignmentContextType | undefined>(undefined);
 
-// Mock data
+// Mock data (modules/quizzes remain local for now)
 const mockModules: CourseModule[] = [
   {
     id: "module-1",
@@ -102,30 +103,7 @@ const mockModules: CourseModule[] = [
   },
 ];
 
-const mockAssignments: Assignment[] = [
-  {
-    id: "assignment-1",
-    courseId: "course-1",
-    title: "Hello World Program",
-    description: "Write your first program that prints 'Hello, World!' to the console. Submit your code file.",
-    dueDate: new Date("2024-03-15"),
-    points: 100,
-    status: "published",
-    createdAt: new Date("2024-01-20"),
-    updatedAt: new Date("2024-01-20"),
-  },
-  {
-    id: "assignment-2",
-    courseId: "course-1",
-    title: "Variables Exercise",
-    description: "Create a program that demonstrates the use of different variable types.",
-    dueDate: new Date("2024-03-20"),
-    points: 150,
-    status: "published",
-    createdAt: new Date("2024-01-25"),
-    updatedAt: new Date("2024-01-25"),
-  },
-];
+const initialAssignments: Assignment[] = [];
 
 const mockQuizzes: Quiz[] = [
   {
@@ -180,144 +158,176 @@ export function AssignmentProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const storedAssignments = localStorage.getItem("eduplatform-assignments");
-    const storedSubmissions = localStorage.getItem("eduplatform-submissions");
-    const storedQuizzes = localStorage.getItem("eduplatform-quizzes");
-    const storedAttempts = localStorage.getItem("eduplatform-quiz-attempts");
-    const storedModules = localStorage.getItem("eduplatform-modules");
+    const loadAll = async () => {
+      try {
+        // Assignments
+        const assignmentsRaw: any[] = await assignmentsApi.list();
+        const mappedAssignments: Assignment[] = assignmentsRaw.map((a) => ({
+          id: a.id,
+          courseId: a.courseId,
+          title: a.title,
+          description: a.description || "",
+          dueDate: new Date(a.dueDate),
+          points: a.points ?? 100,
+          status: (a.status as Assignment["status"]) || "published",
+          createdAt: new Date(a.createdAt),
+          updatedAt: new Date(a.updatedAt),
+        }));
+        setAssignments(mappedAssignments);
 
-    if (storedAssignments) {
-      setAssignments(JSON.parse(storedAssignments).map((a: Assignment) => ({
-        ...a,
-        dueDate: new Date(a.dueDate),
-        createdAt: new Date(a.createdAt),
-        updatedAt: new Date(a.updatedAt),
-      })));
-    } else {
-      setAssignments(mockAssignments);
-      localStorage.setItem("eduplatform-assignments", JSON.stringify(mockAssignments));
-    }
+        // Modules + lessons
+        const modulesRaw: any[] = await modulesApi.list();
+        const mappedModules: CourseModule[] = modulesRaw.map((m) => ({
+          id: m.id,
+          courseId: m.courseId,
+          title: m.title,
+          description: m.description || "",
+          order: m.order ?? m.orderIndex ?? 1,
+          lessons: (m.lessons || []).map((l: any) => ({
+            id: l.id,
+            moduleId: l.moduleId,
+            title: l.title,
+            content: l.content || "",
+            type: l.type,
+            duration: l.duration ?? undefined,
+            order: l.order ?? l.orderIndex ?? 1,
+            resourceUrl: l.resourceUrl ?? undefined,
+            isCompleted: false,
+          })),
+          createdAt: new Date(m.createdAt),
+          updatedAt: new Date(m.updatedAt),
+        }));
+        setModules(mappedModules);
 
-    if (storedSubmissions) {
-      setSubmissions(JSON.parse(storedSubmissions).map((s: AssignmentSubmission) => ({
-        ...s,
-        submittedAt: new Date(s.submittedAt),
-      })));
-    }
+        // Quizzes
+        const quizzesRaw: any[] = await quizzesApi.list();
+        const mappedQuizzes: Quiz[] = quizzesRaw.map((q) => ({
+          id: q.id,
+          courseId: q.courseId,
+          title: q.title,
+          description: q.description || "",
+          timeLimit: q.timeLimit ?? undefined,
+          questions: q.questions || [],
+          dueDate: q.dueDate ? new Date(q.dueDate) : undefined,
+          status: (q.status as Quiz["status"]) || "published",
+          createdAt: new Date(q.createdAt),
+          updatedAt: new Date(q.updatedAt),
+        }));
+        setQuizzes(mappedQuizzes);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    if (storedQuizzes) {
-      setQuizzes(JSON.parse(storedQuizzes).map((q: Quiz) => ({
-        ...q,
-        dueDate: q.dueDate ? new Date(q.dueDate) : undefined,
-        createdAt: new Date(q.createdAt),
-        updatedAt: new Date(q.updatedAt),
-      })));
-    } else {
-      setQuizzes(mockQuizzes);
-      localStorage.setItem("eduplatform-quizzes", JSON.stringify(mockQuizzes));
-    }
-
-    if (storedAttempts) {
-      setQuizAttempts(JSON.parse(storedAttempts).map((a: QuizAttempt) => ({
-        ...a,
-        startedAt: new Date(a.startedAt),
-        completedAt: a.completedAt ? new Date(a.completedAt) : undefined,
-      })));
-    }
-
-    if (storedModules) {
-      setModules(JSON.parse(storedModules).map((m: CourseModule) => ({
-        ...m,
-        createdAt: new Date(m.createdAt),
-        updatedAt: new Date(m.updatedAt),
-      })));
-    } else {
-      setModules(mockModules);
-      localStorage.setItem("eduplatform-modules", JSON.stringify(mockModules));
-    }
-
-    setIsLoading(false);
+    loadAll();
   }, []);
 
-  // Persist to localStorage
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-assignments", JSON.stringify(assignments));
-    }
-  }, [assignments, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-submissions", JSON.stringify(submissions));
-    }
-  }, [submissions, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-quizzes", JSON.stringify(quizzes));
-    }
-  }, [quizzes, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-quiz-attempts", JSON.stringify(quizAttempts));
-    }
-  }, [quizAttempts, isLoading]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem("eduplatform-modules", JSON.stringify(modules));
-    }
-  }, [modules, isLoading]);
+  // No longer persist to localStorage as the backend is the source of truth
 
   // Assignment operations
   const createAssignment = async (data: Omit<Assignment, "id" | "createdAt" | "updatedAt">): Promise<Assignment> => {
-    const newAssignment: Assignment = {
-      ...data,
-      id: `assignment-${Date.now()}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    const payload = {
+      courseId: data.courseId,
+      title: data.title,
+      description: data.description,
+      dueDate: data.dueDate.toISOString(),
     };
-    setAssignments((prev) => [...prev, newAssignment]);
-    return newAssignment;
+
+    const created: any = await assignmentsApi.create(payload);
+    const mapped: Assignment = {
+      id: created.id,
+      courseId: created.courseId,
+      title: created.title,
+      description: created.description || "",
+      dueDate: new Date(created.dueDate),
+      points: (data as any).points ?? 100,
+      status: "published",
+      createdAt: new Date(created.createdAt),
+      updatedAt: new Date(created.updatedAt),
+    };
+
+    setAssignments((prev) => [...prev, mapped]);
+    return mapped;
   };
 
   const updateAssignment = async (id: string, updates: Partial<Assignment>): Promise<Assignment> => {
-    const assignment = assignments.find((a) => a.id === id);
-    if (!assignment) throw new Error("Assignment not found");
-    const updated = { ...assignment, ...updates, updatedAt: new Date() };
-    setAssignments((prev) => prev.map((a) => (a.id === id ? updated : a)));
-    return updated;
+    await assignmentsApi.update(id, {
+      title: updates.title,
+      description: updates.description,
+      dueDate: updates.dueDate ? updates.dueDate.toISOString() : undefined,
+    });
+
+    let updatedAssignment: Assignment | undefined;
+    setAssignments((prev) =>
+      prev.map((a) => {
+        if (a.id !== id) return a;
+        updatedAssignment = { ...a, ...updates, updatedAt: new Date() };
+        return updatedAssignment;
+      })
+    );
+
+    if (!updatedAssignment) {
+      throw new Error("Assignment not found");
+    }
+
+    return updatedAssignment;
   };
 
   const deleteAssignment = async (id: string): Promise<void> => {
+    await assignmentsApi.delete(id);
     setAssignments((prev) => prev.filter((a) => a.id !== id));
     setSubmissions((prev) => prev.filter((s) => s.assignmentId !== id));
   };
 
   const submitAssignment = async (assignmentId: string, content: string, fileUrl?: string): Promise<AssignmentSubmission> => {
     if (!user) throw new Error("Must be logged in");
-    const assignment = assignments.find((a) => a.id === assignmentId);
-    if (!assignment) throw new Error("Assignment not found");
 
-    const isLate = new Date() > new Date(assignment.dueDate);
-    const submission: AssignmentSubmission = {
-      id: `submission-${Date.now()}`,
-      assignmentId,
-      studentId: user.id,
-      studentName: `${user.firstName} ${user.lastName}`,
-      content,
-      fileUrl,
-      submittedAt: new Date(),
-      status: isLate ? "late" : "submitted",
-    };
-    setSubmissions((prev) => [...prev, submission]);
+    await assignmentsApi.submit(assignmentId, { content });
+
+    const assignment = assignments.find((a) => a.id === assignmentId);
+    const isLate = assignment ? new Date() > new Date(assignment.dueDate) : false;
+
+    const existing = submissions.find(
+      (s) => s.assignmentId === assignmentId && s.studentId === user.id
+    );
+
+    const now = new Date();
+    const submission: AssignmentSubmission = existing
+      ? {
+          ...existing,
+          content,
+          fileUrl,
+          submittedAt: now,
+          status: isLate ? "late" : "submitted",
+        }
+      : {
+          id: `submission-${Date.now()}`,
+          assignmentId,
+          studentId: user.id,
+          studentName: `${user.firstName} ${user.lastName}`,
+          content,
+          fileUrl,
+          submittedAt: now,
+          status: isLate ? "late" : " submitted ",
+        };
+
+    setSubmissions((prev) => {
+      const others = prev.filter((s) => s.id !== submission.id);
+      return [...others, submission];
+    });
+
     return submission;
   };
 
   const gradeSubmission = async (submissionId: string, grade: number, feedback?: string): Promise<AssignmentSubmission> => {
     const submission = submissions.find((s) => s.id === submissionId);
     if (!submission) throw new Error("Submission not found");
+
+    await assignmentsApi.gradeSubmission(submission.assignmentId, submissionId, {
+      grade,
+      feedback,
+    });
+
     const updated = { ...submission, grade, feedback, status: "graded" as const };
     setSubmissions((prev) => prev.map((s) => (s.id === submissionId ? updated : s)));
     return updated;
@@ -325,83 +335,101 @@ export function AssignmentProvider({ children }: { children: ReactNode }) {
 
   // Quiz operations
   const createQuiz = async (data: Omit<Quiz, "id" | "createdAt" | "updatedAt">): Promise<Quiz> => {
-    const newQuiz: Quiz = {
-      ...data,
-      id: `quiz-${Date.now()}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+    const payload = {
+      courseId: data.courseId,
+      title: data.title,
+      description: data.description,
+      timeLimit: data.timeLimit,
+      dueDate: data.dueDate ? data.dueDate.toISOString() : undefined,
+      status: data.status,
+      questions: data.questions,
     };
-    setQuizzes((prev) => [...prev, newQuiz]);
-    return newQuiz;
+
+    const created: any = await quizzesApi.create(payload);
+    const mapped: Quiz = {
+      id: created.id,
+      courseId: created.courseId,
+      title: created.title,
+      description: created.description || "",
+      timeLimit: created.timeLimit ?? undefined,
+      questions: created.questions || [],
+      dueDate: created.dueDate ? new Date(created.dueDate) : undefined,
+      status: (created.status as Quiz["status"]) || "published",
+      createdAt: new Date(created.createdAt),
+      updatedAt: new Date(created.updatedAt),
+    };
+
+    setQuizzes((prev) => [...prev, mapped]);
+    return mapped;
   };
 
   const updateQuiz = async (id: string, updates: Partial<Quiz>): Promise<Quiz> => {
-    const quiz = quizzes.find((q) => q.id === id);
-    if (!quiz) throw new Error("Quiz not found");
-    const updated = { ...quiz, ...updates, updatedAt: new Date() };
-    setQuizzes((prev) => prev.map((q) => (q.id === id ? updated : q)));
-    return updated;
+    await quizzesApi.update(id, {
+      title: updates.title,
+      description: updates.description,
+      timeLimit: updates.timeLimit,
+      dueDate: updates.dueDate ? updates.dueDate.toISOString() : undefined,
+      status: updates.status,
+      questions: updates.questions,
+    });
+
+    let updatedQuiz: Quiz | undefined;
+    setQuizzes((prev) =>
+      prev.map((q) => {
+        if (q.id !== id) return q;
+        updatedQuiz = { ...q, ...updates, updatedAt: new Date() };
+        return updatedQuiz;
+      })
+    );
+
+    if (!updatedQuiz) {
+      throw new Error("Quiz not found");
+    }
+
+    return updatedQuiz;
   };
 
   const deleteQuiz = async (id: string): Promise<void> => {
+    await quizzesApi.delete(id);
     setQuizzes((prev) => prev.filter((q) => q.id !== id));
     setQuizAttempts((prev) => prev.filter((a) => a.quizId !== id));
   };
 
   const startQuizAttempt = async (quizId: string): Promise<QuizAttempt> => {
     if (!user) throw new Error("Must be logged in");
-    const quiz = quizzes.find((q) => q.id === quizId);
-    if (!quiz) throw new Error("Quiz not found");
 
-    const maxScore = quiz.questions.reduce((sum, q) => sum + q.points, 0);
-    const attempt: QuizAttempt = {
-      id: `attempt-${Date.now()}`,
-      quizId,
-      studentId: user.id,
-      studentName: `${user.firstName} ${user.lastName}`,
-      answers: [],
-      maxScore,
-      startedAt: new Date(),
-      status: "in-progress",
+    const created: any = await quizzesApi.startAttempt(quizId);
+    const mapped: QuizAttempt = {
+      id: created.id,
+      quizId: created.quizId,
+      studentId: created.studentId,
+      studentName: created.studentName,
+      answers: created.answers || [],
+      score: created.score ?? undefined,
+      maxScore: created.maxScore,
+      startedAt: new Date(created.startedAt),
+      completedAt: created.completedAt ? new Date(created.completedAt) : undefined,
+      status: created.status,
     };
-    setQuizAttempts((prev) => [...prev, attempt]);
-    return attempt;
+
+    setQuizAttempts((prev) => [...prev, mapped]);
+    return mapped;
   };
 
   const submitQuizAttempt = async (attemptId: string, answers: QuizAttempt["answers"]): Promise<QuizAttempt> => {
-    const attempt = quizAttempts.find((a) => a.id === attemptId);
-    if (!attempt) throw new Error("Attempt not found");
-
-    const quiz = quizzes.find((q) => q.id === attempt.quizId);
-    if (!quiz) throw new Error("Quiz not found");
-
-    // Auto-grade
-    const gradedAnswers = answers.map((answer) => {
-      const question = quiz.questions.find((q) => q.id === answer.questionId);
-      if (!question) return { ...answer, isCorrect: false, pointsEarned: 0 };
-
-      let isCorrect = false;
-      if (question.type === "short-answer") {
-        isCorrect = String(answer.answer).toLowerCase().trim() === String(question.correctAnswer).toLowerCase().trim();
-      } else {
-        isCorrect = answer.answer === question.correctAnswer;
-      }
-
-      return {
-        ...answer,
-        isCorrect,
-        pointsEarned: isCorrect ? question.points : 0,
-      };
-    });
-
-    const score = gradedAnswers.reduce((sum, a) => sum + (a.pointsEarned || 0), 0);
+    const updatedRaw: any = await quizzesApi.submitAttempt(attemptId, answers);
 
     const updated: QuizAttempt = {
-      ...attempt,
-      answers: gradedAnswers,
-      score,
-      completedAt: new Date(),
-      status: "completed",
+      id: updatedRaw.id,
+      quizId: updatedRaw.quizId,
+      studentId: updatedRaw.studentId,
+      studentName: updatedRaw.studentName,
+      answers: updatedRaw.answers || [],
+      score: updatedRaw.score ?? undefined,
+      maxScore: updatedRaw.maxScore,
+      startedAt: new Date(updatedRaw.startedAt),
+      completedAt: updatedRaw.completedAt ? new Date(updatedRaw.completedAt) : undefined,
+      status: updatedRaw.status,
     };
 
     setQuizAttempts((prev) => prev.map((a) => (a.id === attemptId ? updated : a)));
@@ -410,26 +438,53 @@ export function AssignmentProvider({ children }: { children: ReactNode }) {
 
   // Module operations
   const createModule = async (data: Omit<CourseModule, "id" | "createdAt" | "updatedAt" | "lessons">): Promise<CourseModule> => {
+    const created: any = await modulesApi.createModule({
+      courseId: data.courseId,
+      title: data.title,
+      description: data.description,
+      order: data.order,
+    });
+
     const newModule: CourseModule = {
-      ...data,
-      id: `module-${Date.now()}`,
+      id: created.id,
+      courseId: created.courseId,
+      title: created.title,
+      description: created.description || "",
+      order: created.order ?? 1,
       lessons: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date(created.createdAt),
+      updatedAt: new Date(created.updatedAt),
     };
+
     setModules((prev) => [...prev, newModule]);
     return newModule;
   };
 
   const updateModule = async (id: string, updates: Partial<CourseModule>): Promise<CourseModule> => {
-    const module = modules.find((m) => m.id === id);
-    if (!module) throw new Error("Module not found");
-    const updated = { ...module, ...updates, updatedAt: new Date() };
-    setModules((prev) => prev.map((m) => (m.id === id ? updated : m)));
-    return updated;
+    await modulesApi.updateModule(id, {
+      title: updates.title,
+      description: updates.description,
+      order: updates.order,
+    });
+
+    let updatedModule: CourseModule | undefined;
+    setModules((prev) =>
+      prev.map((m) => {
+        if (m.id !== id) return m;
+        updatedModule = { ...m, ...updates, updatedAt: new Date() };
+        return updatedModule;
+      })
+    );
+
+    if (!updatedModule) {
+      throw new Error("Module not found");
+    }
+
+    return updatedModule;
   };
 
   const deleteModule = async (id: string): Promise<void> => {
+    await modulesApi.deleteModule(id);
     setModules((prev) => prev.filter((m) => m.id !== id));
   };
 
@@ -437,10 +492,25 @@ export function AssignmentProvider({ children }: { children: ReactNode }) {
     const module = modules.find((m) => m.id === moduleId);
     if (!module) throw new Error("Module not found");
 
+    const created: any = await modulesApi.addLesson(moduleId, {
+      title: lessonData.title,
+      content: lessonData.content,
+      type: lessonData.type,
+      duration: lessonData.duration,
+      order: lessonData.order,
+      resourceUrl: lessonData.resourceUrl,
+    });
+
     const lesson: Lesson = {
-      ...lessonData,
-      id: `lesson-${Date.now()}`,
+      id: created.id,
       moduleId,
+      title: created.title,
+      content: created.content || "",
+      type: created.type,
+      duration: created.duration ?? undefined,
+      order: created.order ?? 1,
+      resourceUrl: created.resourceUrl ?? undefined,
+      isCompleted: lessonData.isCompleted,
     };
 
     const updatedModule = {
@@ -460,6 +530,15 @@ export function AssignmentProvider({ children }: { children: ReactNode }) {
     const lesson = module.lessons.find((l) => l.id === lessonId);
     if (!lesson) throw new Error("Lesson not found");
 
+    await modulesApi.updateLesson(moduleId, lessonId, {
+      title: updates.title,
+      content: updates.content,
+      type: updates.type,
+      duration: updates.duration,
+      order: updates.order,
+      resourceUrl: updates.resourceUrl,
+    });
+
     const updatedLesson = { ...lesson, ...updates };
     const updatedModule = {
       ...module,
@@ -474,6 +553,8 @@ export function AssignmentProvider({ children }: { children: ReactNode }) {
   const deleteLesson = async (moduleId: string, lessonId: string): Promise<void> => {
     const module = modules.find((m) => m.id === moduleId);
     if (!module) throw new Error("Module not found");
+
+    await modulesApi.deleteLesson(moduleId, lessonId);
 
     const updatedModule = {
       ...module,

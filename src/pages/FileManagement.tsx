@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFiles, useUploadFile, useDeleteFile } from "@/hooks/useApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -43,164 +43,90 @@ import {
   Trash2,
   Share2,
   Eye,
-  Plus,
-  HardDrive,
-  Clock,
-  Grid3X3,
+  Loader2,
   List,
+  Grid3X3,
+  Clock,
+  FileArchive,
+  FileCode,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
-
-interface FileItem {
-  id: string;
-  name: string;
-  type: "pdf" | "image" | "video" | "document" | "other";
-  size: number;
-  courseId?: string;
-  courseName?: string;
-  uploadedBy: string;
-  uploadedAt: Date;
-  shared: boolean;
-  folder: string;
-}
-
-const mockFiles: FileItem[] = [
-  {
-    id: "f1",
-    name: "CS101_Lecture_Notes_Week1.pdf",
-    type: "pdf",
-    size: 2400000,
-    courseId: "course-1",
-    courseName: "CS101",
-    uploadedBy: "Prof. John Lecturer",
-    uploadedAt: new Date("2024-02-01"),
-    shared: true,
-    folder: "Course Materials",
-  },
-  {
-    id: "f2",
-    name: "Assignment1_Solution.pdf",
-    type: "pdf",
-    size: 850000,
-    courseId: "course-1",
-    courseName: "CS101",
-    uploadedBy: "Jane Doe",
-    uploadedAt: new Date("2024-02-15"),
-    shared: false,
-    folder: "Submissions",
-  },
-  {
-    id: "f3",
-    name: "Database_ER_Diagram.png",
-    type: "image",
-    size: 1200000,
-    courseId: "course-3",
-    courseName: "DB301",
-    uploadedBy: "Dr. Jane Smith",
-    uploadedAt: new Date("2024-01-25"),
-    shared: true,
-    folder: "Course Materials",
-  },
-  {
-    id: "f4",
-    name: "Web_Dev_Tutorial.mp4",
-    type: "video",
-    size: 45000000,
-    courseId: "course-2",
-    courseName: "WEB201",
-    uploadedBy: "Prof. John Lecturer",
-    uploadedAt: new Date("2024-02-10"),
-    shared: true,
-    folder: "Course Materials",
-  },
-  {
-    id: "f5",
-    name: "Project_Proposal.docx",
-    type: "document",
-    size: 350000,
-    courseId: "course-1",
-    courseName: "CS101",
-    uploadedBy: "Jane Doe",
-    uploadedAt: new Date("2024-02-20"),
-    shared: false,
-    folder: "My Files",
-  },
-  {
-    id: "f6",
-    name: "Research_Paper_Draft.pdf",
-    type: "pdf",
-    size: 1800000,
-    uploadedBy: "Jane Doe",
-    uploadedAt: new Date("2024-02-22"),
-    shared: false,
-    folder: "My Files",
-  },
-];
-
-const formatFileSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-};
-
-const getFileIcon = (type: string) => {
-  switch (type) {
-    case "pdf":
-      return <FileText className="h-5 w-5 text-destructive" />;
-    case "image":
-      return <Image className="h-5 w-5 text-accent" />;
-    case "video":
-      return <Video className="h-5 w-5 text-primary" />;
-    case "document":
-      return <FileText className="h-5 w-5 text-primary" />;
-    default:
-      return <File className="h-5 w-5 text-muted-foreground" />;
-  }
-};
+import { CourseFile } from "@/types";
 
 export default function FileManagement() {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"grid" | "list">("list");
   const [uploadOpen, setUploadOpen] = useState(false);
-  const [selectedFolder, setSelectedFolder] = useState("all");
-  const [files, setFiles] = useState<FileItem[]>(mockFiles);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | "all">("all");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { data: files = [], isLoading } = useFiles(selectedCourseId === "all" ? undefined : selectedCourseId);
+  const { mutate: uploadFile, isPending: isUploading } = useUploadFile();
+  const { mutate: deleteFile } = useDeleteFile();
 
   const isLecturer = user?.role === "lecturer" || user?.role === "admin";
 
-  const folders = ["all", "Course Materials", "Submissions", "My Files"];
-
-  const filteredFiles = files.filter((file) => {
-    const matchesSearch = file.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesFolder = selectedFolder === "all" || file.folder === selectedFolder;
-    return matchesSearch && matchesFolder;
-  });
-
-  const totalStorage = files.reduce((sum, f) => sum + f.size, 0);
-  const maxStorage = 1024 * 1024 * 1024; // 1GB mock limit
-  const storagePercent = (totalStorage / maxStorage) * 100;
-
   const handleUpload = () => {
-    const newFile: FileItem = {
-      id: `f-${Date.now()}`,
-      name: "New_Upload.pdf",
-      type: "pdf",
-      size: 500000,
-      uploadedBy: `${user?.firstName} ${user?.lastName}`,
-      uploadedAt: new Date(),
-      shared: false,
-      folder: "My Files",
-    };
-    setFiles((prev) => [newFile, ...prev]);
-    toast.success("File uploaded successfully! (Mock)");
-    setUploadOpen(false);
+    const file = fileInputRef.current?.files?.[0];
+    if (!file) return;
+
+    uploadFile({
+      file,
+      courseId: selectedCourseId === "all" ? undefined : selectedCourseId
+    }, {
+      onSuccess: () => {
+        toast.success("File uploaded successfully");
+        setUploadOpen(false);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      },
+      onError: () => toast.error("Failed to upload file")
+    });
   };
 
   const handleDelete = (fileId: string) => {
-    setFiles((prev) => prev.filter((f) => f.id !== fileId));
-    toast.success("File deleted");
+    if (confirm("Are you sure you want to delete this file?")) {
+      deleteFile(fileId, {
+        onSuccess: () => toast.success("File deleted"),
+        onError: () => toast.error("Failed to delete file")
+      });
+    }
+  };
+
+  const filteredFiles = files.filter((file: CourseFile) =>
+    file.filename.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalStorage = files.reduce((sum: number, f: CourseFile) => sum + f.size, 0);
+  const maxStorage = 1024 * 1024 * 1024; // 1GB limit (mock)
+  const storagePercent = (totalStorage / maxStorage) * 100;
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const getFileIcon = (mimetype: string) => {
+    if (mimetype.startsWith("image/")) return <Image className="h-5 w-5 text-purple-500" />;
+    if (mimetype.includes("pdf")) return <FileText className="h-5 w-5 text-red-500" />;
+    if (mimetype.includes("video")) return <Video className="h-5 w-5 text-blue-500" />;
+    if (mimetype.includes("zip") || mimetype.includes("rar")) return <FileArchive className="h-5 w-5 text-yellow-500" />;
+    if (mimetype.includes("code") || mimetype.includes("javascript") || mimetype.includes("html")) return <FileCode className="h-5 w-5 text-green-500" />;
+    return <File className="h-5 w-5 text-gray-500" />;
+  };
+
+  const handleDownload = (path: string, filename: string) => {
+    const link = document.createElement('a');
+    link.href = `http://localhost:4000/uploads/${path}`;
+    link.download = filename;
+    link.target = "_blank";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -225,52 +151,50 @@ export default function FileManagement() {
               <DialogHeader>
                 <DialogTitle>Upload File</DialogTitle>
                 <DialogDescription>
-                  Upload a file to your course materials or personal storage
+                  Upload a file to your personal storage or a specific course.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
-                <div className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors">
-                  <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
-                  <p className="font-medium">Drop files here or click to browse</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    PDF, DOCX, PPTX, Images, Videos (max 50MB)
+                <div
+                  className="border-2 border-dashed rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files?.[0]) handleUpload();
+                    }}
+                  />
+                  {isUploading ? (
+                    <Loader2 className="h-10 w-10 mx-auto animate-spin text-primary mb-3" />
+                  ) : (
+                    <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
+                  )}
+                  <p className="font-medium">
+                    {isUploading ? "Uploading..." : "Click to select file"}
                   </p>
                 </div>
-                <div className="space-y-2">
-                  <Label>Folder</Label>
-                  <Select defaultValue="My Files">
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="My Files">My Files</SelectItem>
-                      <SelectItem value="Course Materials">Course Materials</SelectItem>
-                      <SelectItem value="Submissions">Submissions</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
                 {isLecturer && (
                   <div className="space-y-2">
                     <Label>Course (Optional)</Label>
-                    <Select>
+                    <Select
+                      value={selectedCourseId}
+                      onValueChange={setSelectedCourseId}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a course" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="course-1">CS101</SelectItem>
-                        <SelectItem value="course-2">WEB201</SelectItem>
-                        <SelectItem value="course-3">DB301</SelectItem>
+                        <SelectItem value="all">General / Personal</SelectItem>
+                        {/* Ideally fetch courses here, but for now we simplify */}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setUploadOpen(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={handleUpload}>Upload</Button>
-              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>
@@ -280,7 +204,7 @@ export default function FileManagement() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
               <div className="p-3 rounded-full bg-primary/10">
-                <HardDrive className="h-6 w-6 text-primary" />
+                <FolderOpen className="h-6 w-6 text-primary" />
               </div>
               <div className="flex-1">
                 <div className="flex justify-between text-sm mb-1">
@@ -306,45 +230,38 @@ export default function FileManagement() {
               className="pl-9"
             />
           </div>
-          <div className="flex gap-2">
-            <Tabs value={selectedFolder} onValueChange={setSelectedFolder}>
-              <TabsList>
-                {folders.map((folder) => (
-                  <TabsTrigger key={folder} value={folder} className="text-xs">
-                    {folder === "all" ? "All" : folder}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <div className="flex border rounded-md">
-              <Button
-                variant={viewMode === "list" ? "secondary" : "ghost"}
-                size="icon"
-                className="h-9 w-9 rounded-r-none"
-                onClick={() => setViewMode("list")}
-              >
-                <List className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "grid" ? "secondary" : "ghost"}
-                size="icon"
-                className="h-9 w-9 rounded-l-none"
-                onClick={() => setViewMode("grid")}
-              >
-                <Grid3X3 className="h-4 w-4" />
-              </Button>
-            </div>
+          <div className="flex border rounded-md">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-9 w-9 rounded-r-none"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-9 w-9 rounded-l-none"
+              onClick={() => setViewMode("grid")}
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        {/* File List / Grid */}
-        {filteredFiles.length === 0 ? (
+        {/* File List */}
+        {isLoading ? (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : filteredFiles.length === 0 ? (
           <Card>
             <CardContent className="py-12 text-center">
               <FolderOpen className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <h3 className="font-semibold mb-1">No files found</h3>
               <p className="text-sm text-muted-foreground">
-                {searchQuery ? "Try a different search" : "Upload your first file to get started"}
+                Upload your first file to get started
               </p>
             </CardContent>
           </Card>
@@ -352,30 +269,26 @@ export default function FileManagement() {
           <Card>
             <CardContent className="p-0">
               <div className="divide-y">
-                {filteredFiles.map((file) => (
+                {filteredFiles.map((file: CourseFile) => (
                   <div key={file.id} className="flex items-center gap-4 p-4 hover:bg-muted/50 transition-colors">
-                    <div className="p-2 rounded-lg bg-muted">{getFileIcon(file.type)}</div>
+                    <div className="p-2 rounded-lg bg-muted">{getFileIcon(file.mimetype)}</div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{file.name}</p>
+                      <p className="font-medium text-sm truncate">{file.filename}</p>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                         <span>{formatFileSize(file.size)}</span>
-                        {file.courseName && (
+                        {file.courseId && (
                           <Badge variant="outline" className="text-xs h-5">
-                            {file.courseName}
+                            Course Related
                           </Badge>
                         )}
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {format(file.uploadedAt, "MMM d, yyyy")}
+                          {formatDistanceToNow(new Date(file.createdAt), { addSuffix: true })}
                         </span>
+                        <span>by {file.uploaderName}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {file.shared && (
-                        <Badge variant="secondary" className="text-xs">
-                          Shared
-                        </Badge>
-                      )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -383,25 +296,19 @@ export default function FileManagement() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Eye className="h-4 w-4 mr-2" />
-                            Preview
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDownload(file.path, file.filename)}>
                             <Download className="h-4 w-4 mr-2" />
                             Download
                           </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Share2 className="h-4 w-4 mr-2" />
-                            Share
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => handleDelete(file.id)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
+                          {(user?.id === file.uploadedBy || user?.role === 'admin') && (
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => handleDelete(file.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          )}
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
@@ -412,32 +319,31 @@ export default function FileManagement() {
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {filteredFiles.map((file) => (
+            {filteredFiles.map((file: CourseFile) => (
               <Card key={file.id} className="hover:shadow-md transition-shadow cursor-pointer group">
                 <CardContent className="pt-6">
                   <div className="flex flex-col items-center text-center">
                     <div className="p-4 rounded-xl bg-muted mb-3 group-hover:bg-primary/10 transition-colors">
-                      {getFileIcon(file.type)}
+                      {getFileIcon(file.mimetype)}
                     </div>
-                    <p className="font-medium text-sm truncate w-full">{file.name}</p>
+                    <p className="font-medium text-sm truncate w-full" title={file.filename}>{file.filename}</p>
                     <p className="text-xs text-muted-foreground mt-1">
                       {formatFileSize(file.size)}
                     </p>
                     <div className="flex items-center gap-2 mt-3">
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDownload(file.path, file.filename)}>
                         <Download className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <Share2 className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive"
-                        onClick={() => handleDelete(file.id)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {(user?.id === file.uploadedBy || user?.role === 'admin') && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive"
+                          onClick={() => handleDelete(file.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </CardContent>
@@ -449,3 +355,4 @@ export default function FileManagement() {
     </DashboardLayout>
   );
 }
+

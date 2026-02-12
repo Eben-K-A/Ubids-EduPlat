@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Lock, Copy, Users, Check, X, CircleDot, MessageSquare, Users2, Hand, Smile, Info, Calendar, Clock } from "lucide-react";
+import { Lock, Copy, Users, Check, X, CircleDot, MessageSquare, Users2, Hand, Smile, Info, Calendar, Clock, TrendingUp } from "lucide-react";
 import { format } from "date-fns";
 import {
   LiveKitRoom,
@@ -25,6 +25,12 @@ import {
 } from "@livekit/components-react";
 import { DataPacket_Kind, Track } from "livekit-client";
 import { LogOut } from "lucide-react";
+import { MeetingAnalytics } from "@/components/meetings/MeetingAnalytics";
+import { MeetingLayoutSelector, type LayoutMode } from "@/components/meetings/MeetingLayoutSelector";
+import { BreakoutRooms } from "@/components/meetings/BreakoutRooms";
+import { MeetingControls } from "@/components/meetings/MeetingControls";
+import { EnhancedMeetingDetails } from "@/components/meetings/EnhancedMeetingDetails";
+import { EnhancedWaitingRoom } from "@/components/meetings/EnhancedWaitingRoom";
 
 interface Meeting {
   id: string;
@@ -37,13 +43,34 @@ interface Meeting {
   meetingCode: string;
   waitingRoomMode: "host-approve" | "auth-auto" | "auto";
   recordingEnabled: boolean;
+  isPasswordProtected?: boolean;
 }
 
-function VideoGrid() {
+interface VideoGridProps {
+  layout: LayoutMode;
+}
+
+function VideoGrid({ layout }: VideoGridProps) {
   const tracks = useTracks(
     [Track.Source.Camera, Track.Source.ScreenShare],
     { onlySubscribed: false }
   );
+
+  // Custom grid layouts based on selected mode
+  const getGridStyle = () => {
+    switch (layout) {
+      case "spotlight":
+        return "grid-cols-4";
+      case "speaker":
+        return "grid-cols-1";
+      case "sidebar":
+        return "grid-cols-3";
+      case "focus":
+        return "grid-cols-2";
+      default: // grid
+        return "grid-auto-fit";
+    }
+  };
 
   return (
     <GridLayout tracks={tracks} className="h-full w-full">
@@ -59,22 +86,80 @@ type Reaction = {
   y: number;
 };
 
+interface ParticipantMetrics {
+  identity: string;
+  name: string;
+  joinTime: number;
+  videoOnTime: number;
+  audioOnTime: number;
+  handRaises: number;
+  messagesCount: number;
+  engagementScore: number;
+}
+
 function RoomUI({
   isHost,
   isRecording,
+  meeting,
+  startTime,
 }: {
   isHost: boolean;
   isRecording?: boolean;
+  meeting?: Meeting;
+  startTime?: Date;
 }) {
   const { send, chatMessages } = useChat();
   const participants = useParticipants();
   const { localParticipant } = useLocalParticipant();
   const room = useRoomContext();
-  const [panel, setPanel] = useState<"chat" | "participants" | "none">("chat");
+  const [panel, setPanel] = useState<"chat" | "participants" | "analytics" | "details" | "none">("chat");
   const [message, setMessage] = useState("");
   const [handRaised, setHandRaised] = useState(false);
   const [raisedMap, setRaisedMap] = useState<Record<string, boolean>>({});
   const [reactions, setReactions] = useState<Reaction[]>([]);
+  const [layout, setLayout] = useState<LayoutMode>("grid");
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [participantMetrics, setParticipantMetrics] = useState<ParticipantMetrics[]>([]);
+  const [meetingLocked, setMeetingLocked] = useState(false);
+
+  // Track elapsed time
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Update participant metrics periodically
+  useEffect(() => {
+    const updateMetrics = () => {
+      const metrics = participants.map((p) => ({
+        identity: p.identity,
+        name: p.name || p.identity,
+        joinTime: 0,
+        videoOnTime: p.videoTrackPublished ? elapsedSeconds : 0,
+        audioOnTime: p.audioTrackPublished ? elapsedSeconds : 0,
+        handRaises: raisedMap[p.identity] ? 1 : 0,
+        messagesCount: chatMessages.filter((m) => m.sender?.identity === p.identity).length,
+        engagementScore: calculateEngagementScore(p, chatMessages, raisedMap),
+      }));
+      setParticipantMetrics(metrics);
+    };
+    updateMetrics();
+  }, [participants, chatMessages, raisedMap, elapsedSeconds]);
+
+  const calculateEngagementScore = (
+    participant: any,
+    messages: any[],
+    raised: Record<string, boolean>
+  ): number => {
+    let score = 0;
+    if (participant.videoTrackPublished) score += 30;
+    if (participant.audioTrackPublished) score += 20;
+    if (messages.filter((m) => m.sender?.identity === participant.identity).length > 0) score += 20;
+    if (raised[participant.identity]) score += 30;
+    return Math.min(100, score);
+  };
 
   useDataChannel("events", (msg) => {
     try {
@@ -146,7 +231,23 @@ function RoomUI({
   };
 
   return (
-    <div className="h-full flex">
+    <div className="h-full flex flex-col">
+      {/* Top Control Bar */}
+      <div className="border-b border-white/10 bg-[hsl(222,47%,8%)] px-3 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3 flex-1">
+          <MeetingLayoutSelector currentLayout={layout} onLayoutChange={setLayout} />
+        </div>
+        <div className="flex items-center gap-2">
+          <MeetingControls
+            isHost={isHost}
+            isRecording={isRecording || false}
+            participantCount={participants.length}
+            meetingLocked={meetingLocked}
+            meetingDuration={elapsedSeconds}
+          />
+        </div>
+      </div>
+
       {/* Recording indicator */}
       {isRecording && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 animate-pulse">
@@ -172,89 +273,146 @@ function RoomUI({
         </div>
       ))}
 
-      <div className="flex-1 flex flex-col">
-        <div className="flex-1">
-          <VideoGrid />
-        </div>
-        <div className="border-t border-white/10 bg-[hsl(222,47%,8%)] flex items-center justify-between px-3">
-          <ControlBar />
-          <div className="flex items-center gap-2">
-            <Button variant={handRaised ? "default" : "secondary"} size="sm" onClick={toggleHand}>
-              <Hand className="h-4 w-4 mr-2" /> {handRaised ? "Lower Hand" : "Raise Hand"}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => sendReaction("👏")}>
-              <Smile className="h-4 w-4 mr-2" /> React
-            </Button>
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col">
+          <div className="flex-1 overflow-hidden">
+            <VideoGrid layout={layout} />
           </div>
+          <div className="border-t border-white/10 bg-[hsl(222,47%,8%)] flex items-center justify-between px-3 py-2">
+            <ControlBar />
+            <div className="flex items-center gap-2">
+              <Button variant={handRaised ? "default" : "secondary"} size="sm" onClick={toggleHand}>
+                <Hand className="h-4 w-4 mr-2" /> {handRaised ? "Lower Hand" : "Raise Hand"}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => sendReaction("👏")}>
+                <Smile className="h-4 w-4 mr-2" /> React
+              </Button>
+            </div>
+          </div>
+          <RoomAudioRenderer />
         </div>
-        <RoomAudioRenderer />
-      </div>
 
-      <div className="w-80 border-l border-white/10 bg-[hsl(222,47%,8%)] flex flex-col">
-        <div className="flex items-center justify-between p-3 border-b border-white/10">
-          <div className="flex gap-2">
+        {/* Side Panels */}
+        <div className="w-80 border-l border-white/10 bg-[hsl(222,47%,8%)] flex flex-col">
+          <div className="flex items-center gap-1 p-2 border-b border-white/10 overflow-x-auto">
             <Button
               size="sm"
-              variant={panel === "chat" ? "default" : "secondary"}
+              variant={panel === "chat" ? "default" : "ghost"}
               onClick={() => setPanel("chat")}
+              className="text-xs gap-1 flex-shrink-0"
             >
-              <MessageSquare className="h-4 w-4 mr-2" /> Chat
+              <MessageSquare className="h-4 w-4" />
+              <span className="hidden sm:inline">Chat</span>
             </Button>
             <Button
               size="sm"
-              variant={panel === "participants" ? "default" : "secondary"}
+              variant={panel === "participants" ? "default" : "ghost"}
               onClick={() => setPanel("participants")}
+              className="text-xs gap-1 flex-shrink-0"
             >
-              <Users2 className="h-4 w-4 mr-2" /> People
+              <Users2 className="h-4 w-4" />
+              <span className="hidden sm:inline">People</span>
             </Button>
+            {isHost && (
+              <Button
+                size="sm"
+                variant={panel === "analytics" ? "default" : "ghost"}
+                onClick={() => setPanel("analytics")}
+                className="text-xs gap-1 flex-shrink-0"
+              >
+                <TrendingUp className="h-4 w-4" />
+                <span className="hidden sm:inline">Analytics</span>
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant={panel === "details" ? "default" : "ghost"}
+              onClick={() => setPanel("details")}
+              className="text-xs gap-1 flex-shrink-0"
+            >
+              <Info className="h-4 w-4" />
+              <span className="hidden sm:inline">Details</span>
+            </Button>
+            {panel !== "none" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setPanel("none")}
+                className="text-xs ml-auto"
+              >
+                Hide
+              </Button>
+            )}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => setPanel("none")}>Hide</Button>
-        </div>
 
-        {panel === "chat" && (
-          <div className="flex-1 flex flex-col">
-            <ScrollArea className="flex-1 p-3 space-y-3">
-              {chatMessages.map((m) => (
-                <div key={m.id} className="text-sm">
-                  <div className="text-white/60 text-xs">{m.sender?.name ?? "Guest"}</div>
-                  <div>{m.message}</div>
+          {panel === "chat" && (
+            <div className="flex-1 flex flex-col overflow-hidden">
+              <ScrollArea className="flex-1 p-3 space-y-3">
+                {chatMessages.map((m) => (
+                  <div key={m.id} className="text-sm">
+                    <div className="text-white/60 text-xs">{m.sender?.name ?? "Guest"}</div>
+                    <div className="text-white">{m.message}</div>
+                  </div>
+                ))}
+              </ScrollArea>
+              <div className="p-3 border-t border-white/10 flex gap-2">
+                <Input
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Type a message..."
+                  onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
+                />
+                <Button onClick={sendMessage} size="sm">Send</Button>
+              </div>
+            </div>
+          )}
+
+          {panel === "participants" && (
+            <ScrollArea className="flex-1 p-3 space-y-2">
+              {participants.map((p) => (
+                <div key={p.identity} className="flex items-center justify-between text-sm p-2 rounded hover:bg-white/5">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="truncate text-white">{p.name || p.identity}</span>
+                    {raisedMap[p.identity] && <Hand className="h-4 w-4 text-yellow-400 flex-shrink-0" />}
+                  </div>
+                  {isHost && p.identity !== localParticipant.identity && (
+                    <div className="flex gap-1 flex-shrink-0">
+                      <Button size="icon" variant="secondary" onClick={() => hostControl(p.identity, "mute")} className="h-7 w-7">
+                        <span className="text-xs">M</span>
+                      </Button>
+                      <Button size="icon" variant="secondary" onClick={() => hostControl(p.identity, "cameraOff")} className="h-7 w-7">
+                        <span className="text-xs">C</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </ScrollArea>
-            <div className="p-3 border-t border-white/10 flex gap-2">
-              <Input
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Type a message..."
-                onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
-              />
-              <Button onClick={sendMessage}>Send</Button>
-            </div>
-          </div>
-        )}
+          )}
 
-        {panel === "participants" && (
-          <ScrollArea className="flex-1 p-3 space-y-2">
-            {participants.map((p) => (
-              <div key={p.identity} className="flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2">
-                  <span>{p.name || p.identity}</span>
-                  {raisedMap[p.identity] && <Hand className="h-4 w-4 text-yellow-400" />}
-                </div>
-                {isHost && p.identity !== localParticipant.identity && (
-                  <div className="flex gap-1">
-                    <Button size="icon" variant="secondary" onClick={() => hostControl(p.identity, "mute")}>
-                      <span className="text-xs">M</span>
-                    </Button>
-                    <Button size="icon" variant="secondary" onClick={() => hostControl(p.identity, "cameraOff")}>
-                      <span className="text-xs">C</span>
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </ScrollArea>
-        )}
+          {panel === "analytics" && isHost && (
+            <MeetingAnalytics
+              participants={participantMetrics}
+              elapsedSeconds={elapsedSeconds}
+            />
+          )}
+
+          {panel === "details" && meeting && (
+            <EnhancedMeetingDetails
+              title={meeting.title}
+              description={meeting.description}
+              meetingCode={meeting.meetingCode}
+              hostName={meeting.hostName}
+              startTime={meeting.startTime}
+              duration={meeting.duration}
+              participantCount={participants.length}
+              recordingEnabled={meeting.recordingEnabled}
+              waitingRoomMode={meeting.waitingRoomMode}
+              passwordProtected={meeting.isPasswordProtected || false}
+              elapsedTime={elapsedSeconds}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
@@ -273,6 +431,7 @@ export default function MeetingRoom() {
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [passwordInput, setPasswordInput] = useState("");
   const [showDetails, setShowDetails] = useState(false);
+  const [roomStartTime, setRoomStartTime] = useState<Date | undefined>(undefined);
 
   const displayName = useMemo(() => {
     if (user?.firstName) return `${user.firstName} ${user.lastName ?? ""}`.trim();
@@ -324,6 +483,7 @@ export default function MeetingRoom() {
             return;
           }
           setToken(tokenValue);
+          setRoomStartTime(new Date());
           setJoinState("joined");
           return;
         }
@@ -575,7 +735,12 @@ export default function MeetingRoom() {
               data-lk-theme="default"
               className="h-full"
             >
-              <RoomUI isHost={isHost} isRecording={isRecording} />
+              <RoomUI
+                isHost={isHost}
+                isRecording={isRecording}
+                meeting={meeting || undefined}
+                startTime={roomStartTime}
+              />
             </LiveKitRoom>
           )}
         </div>
@@ -646,33 +811,18 @@ export default function MeetingRoom() {
           </div>
         )}
 
-        {isHost && meeting?.waitingRoomMode !== "auto" && !showDetails && (
-          <div className="w-80 border-l border-white/10 bg-[hsl(222,47%,8%)]">
-            <div className="p-3 text-sm font-semibold">Waiting Room</div>
-            <ScrollArea className="h-[calc(100%-48px)]">
-              <div className="p-3 space-y-2">
-                {pending.length === 0 ? (
-                  <div className="text-xs text-white/50">No pending guests</div>
-                ) : (
-                  pending.map((p) => (
-                    <Card key={p.id} className="bg-white/5 border-white/10">
-                      <CardContent className="p-3 flex items-center justify-between">
-                        <div className="text-sm">{p.name}</div>
-                        <div className="flex gap-1">
-                          <Button size="icon" variant="secondary" onClick={() => handleApprove(p.id)}>
-                            <Check className="h-4 w-4" />
-                          </Button>
-                          <Button size="icon" variant="destructive" onClick={() => handleDeny(p.id)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
+        {isHost && meeting?.waitingRoomMode !== "auto" && (
+          <EnhancedWaitingRoom
+            participants={pending.map((p) => ({
+              id: p.id,
+              name: p.name,
+              joinedAt: new Date(),
+            }))}
+            isHost={isHost}
+            onApprove={handleApprove}
+            onDeny={handleDeny}
+            mode={meeting?.waitingRoomMode as "host-approve" | "auth-auto"}
+          />
         )}
       </div>
     </div>

@@ -8,6 +8,7 @@ import {
   ClassInvite,
 } from "@/types/classroom";
 import { useAuth } from "./AuthContext";
+import { classroomApi } from "@/services/api";
 
 interface ClassroomContextType {
   // Announcements
@@ -229,58 +230,99 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  // Persist
-  useEffect(() => { if (!isLoading) localStorage.setItem("edu-announcements", JSON.stringify(announcements)); }, [announcements, isLoading]);
-  useEffect(() => { if (!isLoading) localStorage.setItem("edu-materials", JSON.stringify(materials)); }, [materials, isLoading]);
-  useEffect(() => { if (!isLoading) localStorage.setItem("edu-topics", JSON.stringify(topics)); }, [topics, isLoading]);
-  useEffect(() => { if (!isLoading) localStorage.setItem("edu-rubrics", JSON.stringify(rubrics)); }, [rubrics, isLoading]);
-  useEffect(() => { if (!isLoading) localStorage.setItem("edu-class-invites", JSON.stringify(classInvites)); }, [classInvites, isLoading]);
+  // Backend is the source of truth; no localStorage persistence.
+
+  useEffect(() => {
+    const load = async () => {
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const state: any = await classroomApi.state();
+
+        const anns: Announcement[] = (state.announcements || []).map((a: any) => ({
+          ...a,
+          comments: (a.comments || []).map((c: any) => ({ ...c, createdAt: new Date(c.createdAt) })),
+          createdAt: new Date(a.createdAt),
+          updatedAt: new Date(a.updatedAt),
+        }));
+        setAnnouncements(anns);
+
+        const mats: ClassMaterial[] = (state.materials || []).map((m: any) => ({
+          ...m,
+          createdAt: new Date(m.createdAt),
+          updatedAt: new Date(m.updatedAt),
+        }));
+        setMaterials(mats);
+
+        const tps: ClassTopic[] = (state.topics || []).map((t: any) => ({
+          ...t,
+          order: t.order ?? t.orderIndex ?? 1,
+          createdAt: new Date(t.createdAt),
+        }));
+        setTopics(tps);
+
+        const rbs: Rubric[] = (state.rubrics || []).map((r: any) => ({
+          ...r,
+          createdAt: new Date(r.createdAt),
+          updatedAt: new Date(r.updatedAt),
+        }));
+        setRubrics(rbs);
+
+        const invs: ClassInvite[] = (state.invites || []).map((i: any) => ({
+          ...i,
+          isActive: Boolean(i.isActive),
+          createdAt: new Date(i.createdAt),
+        }));
+        setClassInvites(invs);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    load();
+  }, [user]);
 
   // Announcements
   const createAnnouncement = async (courseId: string, content: string, attachments?: Announcement["attachments"]) => {
-    if (!user) throw new Error("Must be logged in");
+    const created: any = await classroomApi.createAnnouncement({ courseId, content, attachments });
     const ann: Announcement = {
-      id: `ann-${Date.now()}`,
-      courseId,
-      authorId: user.id,
-      authorName: `${user.firstName} ${user.lastName}`,
-      authorRole: user.role,
-      content,
-      attachments: attachments || [],
+      ...created,
+      createdAt: new Date(created.createdAt),
+      updatedAt: new Date(created.updatedAt),
       comments: [],
-      isPinned: false,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     };
     setAnnouncements((prev) => [ann, ...prev]);
     return ann;
   };
 
   const deleteAnnouncement = async (id: string) => {
+    await classroomApi.deleteAnnouncement(id);
     setAnnouncements((prev) => prev.filter((a) => a.id !== id));
   };
 
   const togglePinAnnouncement = async (id: string) => {
-    setAnnouncements((prev) => prev.map((a) => a.id === id ? { ...a, isPinned: !a.isPinned } : a));
+    const res: any = await classroomApi.togglePin(id);
+    setAnnouncements((prev) => prev.map((a) => a.id === id ? { ...a, isPinned: Boolean(res.isPinned) } : a));
   };
 
   const addComment = async (announcementId: string, content: string) => {
-    if (!user) throw new Error("Must be logged in");
-    const comment: AnnouncementComment = {
-      id: `comment-${Date.now()}`,
-      authorId: user.id,
-      authorName: `${user.firstName} ${user.lastName}`,
-      authorRole: user.role,
-      content,
-      createdAt: new Date(),
-    };
+    const created: any = await classroomApi.addComment(announcementId, { content });
+    const comment: AnnouncementComment = { ...created, createdAt: new Date(created.createdAt) };
     setAnnouncements((prev) =>
-      prev.map((a) => a.id === announcementId ? { ...a, comments: [...a.comments, comment], updatedAt: new Date() } : a)
+      prev.map((a) =>
+        a.id === announcementId
+          ? { ...a, comments: [...a.comments, comment], updatedAt: new Date() }
+          : a
+      )
     );
     return comment;
   };
 
   const deleteComment = async (announcementId: string, commentId: string) => {
+    await classroomApi.deleteComment(announcementId, commentId);
     setAnnouncements((prev) =>
       prev.map((a) => a.id === announcementId ? { ...a, comments: a.comments.filter((c) => c.id !== commentId) } : a)
     );
@@ -298,20 +340,18 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
 
   // Materials
   const addMaterial = async (data: Omit<ClassMaterial, "id" | "createdBy" | "createdByName" | "createdAt" | "updatedAt">) => {
-    if (!user) throw new Error("Must be logged in");
+    const created: any = await classroomApi.addMaterial(data);
     const mat: ClassMaterial = {
-      ...data,
-      id: `mat-${Date.now()}`,
-      createdBy: user.id,
-      createdByName: `${user.firstName} ${user.lastName}`,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      ...created,
+      createdAt: new Date(created.createdAt),
+      updatedAt: new Date(created.updatedAt),
     };
     setMaterials((prev) => [...prev, mat]);
     return mat;
   };
 
   const deleteMaterial = async (id: string) => {
+    await classroomApi.deleteMaterial(id);
     setMaterials((prev) => prev.filter((m) => m.id !== id));
   };
 
@@ -321,23 +361,19 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
 
   // Topics
   const createTopic = async (courseId: string, name: string) => {
-    const existing = topics.filter((t) => t.courseId === courseId);
-    const topic: ClassTopic = {
-      id: `topic-${Date.now()}`,
-      courseId,
-      name,
-      order: existing.length + 1,
-      createdAt: new Date(),
-    };
+    const created: any = await classroomApi.createTopic({ courseId, name });
+    const topic: ClassTopic = { ...created, createdAt: new Date(created.createdAt) };
     setTopics((prev) => [...prev, topic]);
     return topic;
   };
 
   const deleteTopic = async (id: string) => {
+    await classroomApi.deleteTopic(id);
     setTopics((prev) => prev.filter((t) => t.id !== id));
   };
 
   const reorderTopics = async (courseId: string, orderedIds: string[]) => {
+    await classroomApi.reorderTopics({ courseId, orderedIds });
     setTopics((prev) =>
       prev.map((t) => {
         if (t.courseId !== courseId) return t;
@@ -353,13 +389,11 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
 
   // Rubrics
   const createRubric = async (data: Omit<Rubric, "id" | "createdBy" | "createdAt" | "updatedAt">) => {
-    if (!user) throw new Error("Must be logged in");
+    const created: any = await classroomApi.createRubric(data);
     const rubric: Rubric = {
-      ...data,
-      id: `rubric-${Date.now()}`,
-      createdBy: user.id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      ...created,
+      createdAt: new Date(created.createdAt),
+      updatedAt: new Date(created.updatedAt),
     };
     setRubrics((prev) => [...prev, rubric]);
     return rubric;
@@ -368,12 +402,18 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
   const updateRubric = async (id: string, updates: Partial<Rubric>) => {
     const rubric = rubrics.find((r) => r.id === id);
     if (!rubric) throw new Error("Rubric not found");
-    const updated = { ...rubric, ...updates, updatedAt: new Date() };
+    const updatedRaw: any = await classroomApi.updateRubric(id, updates);
+    const updated = {
+      ...updatedRaw,
+      createdAt: new Date(updatedRaw.createdAt),
+      updatedAt: new Date(updatedRaw.updatedAt),
+    } as Rubric;
     setRubrics((prev) => prev.map((r) => r.id === id ? updated : r));
     return updated;
   };
 
   const deleteRubric = async (id: string) => {
+    await classroomApi.deleteRubric(id);
     setRubrics((prev) => prev.filter((r) => r.id !== id));
   };
 
@@ -383,19 +423,14 @@ export function ClassroomProvider({ children }: { children: ReactNode }) {
 
   // Class Codes
   const generateClassCode = async (courseId: string) => {
-    const existing = classInvites.find((i) => i.courseId === courseId);
-    if (existing?.isActive) return existing;
-    const invite: ClassInvite = {
-      courseId,
-      code: generateCode(),
-      isActive: true,
-      createdAt: new Date(),
-    };
+    const created: any = await classroomApi.generateInvite(courseId);
+    const invite: ClassInvite = { ...created, createdAt: new Date(created.createdAt) };
     setClassInvites((prev) => [...prev.filter((i) => i.courseId !== courseId), invite]);
     return invite;
   };
 
   const disableClassCode = async (courseId: string) => {
+    await classroomApi.disableInvite(courseId);
     setClassInvites((prev) =>
       prev.map((i) => i.courseId === courseId ? { ...i, isActive: false } : i)
     );

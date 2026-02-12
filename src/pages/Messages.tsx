@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  useConversations,
+  useMessages,
+  useSendMessage,
+  useCreateConversation,
+  useReactToMessage,
+  useUsers,
+  useMarkConversationRead
+} from "@/hooks/useApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,119 +68,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Conversation, Message, DeliveryStatus, MessageReaction } from "@/types";
 
-type DeliveryStatus = "sending" | "sent" | "delivered" | "read";
 
-interface MessageReaction {
-  emoji: string;
-  count: number;
-  byMe: boolean;
-}
-
-interface Message {
-  id: string;
-  senderId: string;
-  content: string;
-  time: string;
-  timestamp: number;
-  status: DeliveryStatus;
-  replyTo?: { sender: string; content: string };
-  reactions: MessageReaction[];
-  isPinned?: boolean;
-  isVoice?: boolean;
-  voiceDuration?: string;
-  attachment?: { name: string; type: string; size: string };
-}
-
-interface Conversation {
-  id: string;
-  name: string;
-  lastMessage: string;
-  time: string;
-  unread: number;
-  online: boolean;
-  isGroup?: boolean;
-  isStarred?: boolean;
-  isArchived?: boolean;
-  members?: string[];
-  messages: Message[];
-}
-
-const initialConversations: Conversation[] = [
-  {
-    id: "1",
-    name: "Dr. Sarah Johnson",
-    lastMessage: "The assignment deadline has been extended to Friday",
-    time: "2 min ago",
-    unread: 2,
-    online: true,
-    isStarred: true,
-    messages: [
-      { id: "1a", senderId: "other", content: "Hi! I wanted to let you know about the assignment.", time: "10:28 AM", timestamp: 1, status: "read", reactions: [] },
-      { id: "1b", senderId: "me", content: "Sure, what's the update?", time: "10:30 AM", timestamp: 2, status: "read", reactions: [] },
-      { id: "1c", senderId: "other", content: "The assignment deadline has been extended to Friday. Please make sure to submit by 11:59 PM.", time: "10:32 AM", timestamp: 3, status: "read", reactions: [{ emoji: "👍", count: 2, byMe: true }] },
-      { id: "1d", senderId: "me", content: "That's great news! Thank you for letting me know.", time: "10:33 AM", timestamp: 4, status: "delivered", reactions: [] },
-    ],
-  },
-  {
-    id: "2",
-    name: "CS101 Study Group",
-    lastMessage: "Alex: Can someone explain the recursion problem?",
-    time: "15 min ago",
-    unread: 5,
-    online: false,
-    isGroup: true,
-    members: ["You", "Alex Chen", "Emma Williams", "Bob Smith", "Carol Davis"],
-    messages: [
-      { id: "2a", senderId: "alex", content: "Hey everyone, how's the exam prep going?", time: "9:00 AM", timestamp: 1, status: "read", reactions: [] },
-      { id: "2b", senderId: "me", content: "Going well! Stuck on chapter 5 though.", time: "9:05 AM", timestamp: 2, status: "read", reactions: [{ emoji: "😅", count: 3, byMe: false }] },
-      { id: "2c", senderId: "emma", content: "I can help with chapter 5! Let's discuss.", time: "9:10 AM", timestamp: 3, status: "read", reactions: [{ emoji: "🙏", count: 1, byMe: true }] },
-      { id: "2d", senderId: "alex", content: "Can someone explain the recursion problem?", time: "9:45 AM", timestamp: 4, status: "read", reactions: [] },
-    ],
-  },
-  {
-    id: "3",
-    name: "Prof. Michael Chen",
-    lastMessage: "Your grade has been updated",
-    time: "1 hour ago",
-    unread: 0,
-    online: true,
-    messages: [
-      { id: "3a", senderId: "other", content: "I've reviewed your latest submission.", time: "9:00 AM", timestamp: 1, status: "read", reactions: [] },
-      { id: "3b", senderId: "other", content: "Your grade has been updated. You scored 92/100.", time: "9:01 AM", timestamp: 2, status: "read", reactions: [{ emoji: "🎉", count: 1, byMe: true }] },
-      { id: "3c", senderId: "me", content: "Thank you, Professor! I'll review the feedback.", time: "9:15 AM", timestamp: 3, status: "read", reactions: [] },
-    ],
-  },
-  {
-    id: "4",
-    name: "Emma Williams",
-    lastMessage: "Thanks for the notes!",
-    time: "Yesterday",
-    unread: 0,
-    online: false,
-    messages: [
-      { id: "4a", senderId: "me", content: "Here are the notes from today's lecture.", time: "Yesterday", timestamp: 1, status: "read", reactions: [], attachment: { name: "lecture-notes.pdf", type: "pdf", size: "2.4 MB" } },
-      { id: "4b", senderId: "other", content: "Thanks for the notes! These are really helpful.", time: "Yesterday", timestamp: 2, status: "read", reactions: [{ emoji: "❤️", count: 1, byMe: false }] },
-      { id: "4c", senderId: "me", content: "No problem! Let me know if you need anything else.", time: "Yesterday", timestamp: 3, status: "delivered", reactions: [] },
-    ],
-  },
-  {
-    id: "5",
-    name: "Database Project Team",
-    lastMessage: "Meeting at 3pm tomorrow",
-    time: "Yesterday",
-    unread: 0,
-    online: false,
-    isGroup: true,
-    isArchived: false,
-    members: ["You", "Mike Johnson", "Lisa Wang", "Tom Brown"],
-    messages: [
-      { id: "5a", senderId: "mike", content: "I've finished the ER diagram", time: "Yesterday", timestamp: 1, status: "read", reactions: [{ emoji: "👍", count: 3, byMe: true }] },
-      { id: "5b", senderId: "lisa", content: "Looks great! Let's discuss normalization next", time: "Yesterday", timestamp: 2, status: "read", reactions: [] },
-      { id: "5c", senderId: "me", content: "Meeting at 3pm tomorrow", time: "Yesterday", timestamp: 3, status: "read", reactions: [] },
-    ],
-  },
-];
 
 function DeliveryIndicator({ status }: { status: DeliveryStatus }) {
   switch (status) {
@@ -205,8 +104,7 @@ const reactionEmojis = ["👍", "❤️", "😂", "😮", "😢", "🎉", "🙏"
 export default function Messages() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
-  const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
-  const [selectedConversation, setSelectedConversation] = useState<string | null>(isMobile ? null : "1");
+  const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
@@ -218,22 +116,33 @@ export default function Messages() {
   const [filter, setFilter] = useState<"all" | "unread" | "starred" | "groups">("all");
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+  const [newGroupName, setNewGroupName] = useState("");
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // API Hooks
+  const { data: conversations = [], isLoading: loadingConversations } = useConversations();
+  const { data: messages = [], isLoading: loadingMessages } = useMessages(selectedConversation || "");
+  const { mutate: sendMessage } = useSendMessage();
+  const { mutate: createConversation } = useCreateConversation();
+  const { mutate: reactToMessage } = useReactToMessage();
+  const { mutate: markConversationRead } = useMarkConversationRead();
+  const { data: users = [] } = useUsers(); // For creating groups
 
   // On mobile, show list by default
   const showChatView = isMobile ? !!selectedConversation : true;
   const showListView = isMobile ? !selectedConversation : true;
 
-  const activeConversation = conversations.find((c) => c.id === selectedConversation);
+  const activeConversation = conversations?.find((c: Conversation) => c.id === selectedConversation);
 
-  const filteredConversations = conversations.filter((c) => {
+  const filteredConversations = conversations?.filter((c: Conversation) => {
     const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase());
     if (filter === "unread") return matchesSearch && c.unread > 0;
     if (filter === "starred") return matchesSearch && c.isStarred;
     if (filter === "groups") return matchesSearch && c.isGroup;
     return matchesSearch;
-  });
+  }) || [];
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -241,7 +150,7 @@ export default function Messages() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [activeConversation?.messages.length, scrollToBottom]);
+  }, [messages.length, scrollToBottom]);
 
   useEffect(() => {
     if (isRecordingVoice) {
@@ -255,162 +164,70 @@ export default function Messages() {
   const handleSendMessage = () => {
     if (!newMessage.trim() || !selectedConversation) return;
 
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const msgId = crypto.randomUUID();
-
-    const newMsg: Message = {
-      id: msgId,
-      senderId: "me",
-      content: newMessage.trim(),
-      time: timeStr,
-      timestamp: Date.now(),
-      status: "sending",
-      replyTo: replyingTo || undefined,
-      reactions: [],
-    };
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === selectedConversation
-          ? { ...c, messages: [...c.messages, newMsg], lastMessage: newMessage.trim(), time: "Just now" }
-          : c
-      )
+    sendMessage(
+      {
+        conversationId: selectedConversation,
+        data: {
+          content: newMessage.trim(),
+          replyToId: replyingTo ? messages?.find((m: Message) => m.content === replyingTo.content)?.id : undefined
+        }
+      },
+      {
+        onSuccess: () => {
+          setNewMessage("");
+          setReplyingTo(null);
+          scrollToBottom();
+        },
+        onError: () => {
+          toast.error("Failed to send message");
+        }
+      }
     );
-    setNewMessage("");
-    setReplyingTo(null);
-
-    setTimeout(() => {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedConversation
-            ? { ...c, messages: c.messages.map((m) => (m.id === msgId ? { ...m, status: "sent" as DeliveryStatus } : m)) }
-            : c
-        )
-      );
-    }, 500);
-
-    setTimeout(() => {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedConversation
-            ? { ...c, messages: c.messages.map((m) => (m.id === msgId ? { ...m, status: "delivered" as DeliveryStatus } : m)) }
-            : c
-        )
-      );
-    }, 1200);
-
-    setTimeout(() => setIsTyping(true), 2000);
-    setTimeout(() => {
-      setIsTyping(false);
-      const replies = [
-        "Got it, thanks for letting me know!",
-        "That makes sense. I'll look into it.",
-        "Great, I appreciate the update!",
-        "Sure thing, I'll work on that.",
-        "Thanks! This is really helpful.",
-        "Absolutely, let's do it! 💪",
-        "I'll send you the details shortly.",
-      ];
-      const reply: Message = {
-        id: crypto.randomUUID(),
-        senderId: "other",
-        content: replies[Math.floor(Math.random() * replies.length)],
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        timestamp: Date.now(),
-        status: "read",
-        reactions: [],
-      };
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedConversation
-            ? { ...c, messages: [...c.messages, reply], lastMessage: reply.content, time: "Just now" }
-            : c
-        )
-      );
-      setTimeout(() => {
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === selectedConversation
-              ? { ...c, messages: c.messages.map((m) => (m.id === msgId ? { ...m, status: "read" as DeliveryStatus } : m)) }
-              : c
-          )
-        );
-      }, 500);
-    }, 4000);
   };
 
   const handleReaction = (messageId: string, emoji: string) => {
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === selectedConversation
-          ? {
-              ...c,
-              messages: c.messages.map((m) => {
-                if (m.id !== messageId) return m;
-                const existing = m.reactions.find((r) => r.emoji === emoji);
-                if (existing) {
-                  if (existing.byMe) {
-                    return { ...m, reactions: m.reactions.filter((r) => r.emoji !== emoji) };
-                  }
-                  return { ...m, reactions: m.reactions.map((r) => r.emoji === emoji ? { ...r, count: r.count + 1, byMe: true } : r) };
-                }
-                return { ...m, reactions: [...m.reactions, { emoji, count: 1, byMe: true }] };
-              }),
-            }
-          : c
-      )
-    );
+    reactToMessage({ messageId, emoji });
     setShowReactions(null);
   };
 
   const toggleStar = (convId: string) => {
-    setConversations((prev) =>
-      prev.map((c) => (c.id === convId ? { ...c, isStarred: !c.isStarred } : c))
-    );
+    toast.info("Starring conversations is coming soon!");
   };
 
   const sendVoiceMessage = () => {
     if (!selectedConversation) return;
     const duration = `0:${voiceSeconds.toString().padStart(2, "0")}`;
-    const msg: Message = {
-      id: crypto.randomUUID(),
-      senderId: "me",
-      content: "🎤 Voice message",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      timestamp: Date.now(),
-      status: "sent",
-      reactions: [],
-      isVoice: true,
-      voiceDuration: duration,
-    };
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === selectedConversation
-          ? { ...c, messages: [...c.messages, msg], lastMessage: "🎤 Voice message", time: "Just now" }
-          : c
-      )
-    );
-    setIsRecordingVoice(false);
-    toast.success("Voice message sent!");
+
+    sendMessage({
+      conversationId: selectedConversation,
+      data: {
+        content: "🎤 Voice message",
+        type: "voice",
+        voiceDuration: duration
+      }
+    }, {
+      onSuccess: () => {
+        setIsRecordingVoice(false);
+        toast.success("Voice message sent!");
+        scrollToBottom();
+      }
+    });
   };
 
   const handleSelectConversation = (id: string) => {
     setSelectedConversation(id);
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, unread: 0 } : c))
-    );
+    markConversationRead(id);
   };
 
   const handleBackToList = () => {
     setSelectedConversation(null);
   };
 
-  const filteredMessages = activeConversation?.messages.filter(
-    (m) => !messageSearch || m.content.toLowerCase().includes(messageSearch.toLowerCase())
-  );
+  const filteredMessages = messages?.filter(
+    (m: Message) => !messageSearch || m.content.toLowerCase().includes(messageSearch.toLowerCase())
+  ) || [];
 
-  const totalUnread = conversations.reduce((sum, c) => sum + c.unread, 0);
+  const totalUnread = conversations?.reduce((sum: number, c: Conversation) => sum + (c.unread || 0), 0) || 0;
 
   return (
     <DashboardLayout>
@@ -442,23 +259,52 @@ export default function Messages() {
                         <div className="space-y-4">
                           <div className="space-y-2">
                             <Label>Group Name</Label>
-                            <Input placeholder="e.g., CS101 Project Team" />
+                            <Input
+                              placeholder="e.g., CS101 Project Team"
+                              value={newGroupName}
+                              onChange={(e) => setNewGroupName(e.target.value)}
+                            />
                           </div>
                           <div className="space-y-2">
                             <Label>Add Members</Label>
-                            <div className="space-y-2">
-                              {["Dr. Sarah Johnson", "Alice Chen", "Bob Williams", "Prof. Michael Chen", "Emma Williams"].map((name) => (
-                                <div key={name} className="flex items-center gap-2">
-                                  <Checkbox id={name} />
-                                  <Label htmlFor={name} className="text-sm">{name}</Label>
-                                </div>
-                              ))}
-                            </div>
+                            <ScrollArea className="h-48 border rounded-md p-2">
+                              <div className="space-y-2">
+                                {users.filter((u: any) => u.id !== user?.id).map((u: any) => (
+                                  <div key={u.id} className="flex items-center gap-2">
+                                    <Checkbox
+                                      id={u.id}
+                                      checked={selectedMembers.includes(u.id)}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) setSelectedMembers([...selectedMembers, u.id]);
+                                        else setSelectedMembers(selectedMembers.filter(id => id !== u.id));
+                                      }}
+                                    />
+                                    <Label htmlFor={u.id} className="text-sm cursor-pointer ml-2">
+                                      {u.firstName} {u.lastName} <span className="text-xs text-muted-foreground">({u.role})</span>
+                                    </Label>
+                                  </div>
+                                ))}
+                              </div>
+                            </ScrollArea>
                           </div>
                         </div>
                         <DialogFooter>
                           <Button variant="outline" onClick={() => setCreateGroupOpen(false)}>Cancel</Button>
-                          <Button onClick={() => { toast.success("Group created!"); setCreateGroupOpen(false); }}>Create Group</Button>
+                          <Button onClick={() => {
+                            createConversation({
+                              type: "group",
+                              name: newGroupName,
+                              participantIds: selectedMembers
+                            }, {
+                              onSuccess: () => {
+                                toast.success("Group created!");
+                                setCreateGroupOpen(false);
+                                setNewGroupName("");
+                                setSelectedMembers([]);
+                              },
+                              onError: () => toast.error("Failed to create group")
+                            });
+                          }}>Create Group</Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
@@ -498,11 +344,10 @@ export default function Messages() {
                       <button
                         key={conversation.id}
                         onClick={() => handleSelectConversation(conversation.id)}
-                        className={`w-full p-3 rounded-lg text-left transition-colors ${
-                          selectedConversation === conversation.id
-                            ? "bg-primary/10"
-                            : "hover:bg-muted"
-                        }`}
+                        className={`w-full p-3 rounded-lg text-left transition-colors ${selectedConversation === conversation.id
+                          ? "bg-primary/10"
+                          : "hover:bg-muted"
+                          }`}
                       >
                         <div className="flex items-start gap-3">
                           <div className="relative flex-shrink-0">
@@ -524,12 +369,6 @@ export default function Messages() {
                               <span className="text-xs text-muted-foreground flex-shrink-0">{conversation.time}</span>
                             </div>
                             <div className="flex items-center gap-1 mt-1">
-                              {conversation.messages.length > 0 &&
-                                conversation.messages[conversation.messages.length - 1].senderId === "me" && (
-                                  <DeliveryIndicator
-                                    status={conversation.messages[conversation.messages.length - 1].status}
-                                  />
-                                )}
                               <p className="text-xs text-muted-foreground truncate">{conversation.lastMessage}</p>
                             </div>
                           </div>
@@ -687,11 +526,10 @@ export default function Messages() {
                                 )}
                                 <div className="relative">
                                   <div
-                                    className={`p-2.5 sm:p-3 rounded-2xl ${
-                                      isMine
-                                        ? "bg-primary text-primary-foreground rounded-br-md"
-                                        : "bg-muted rounded-bl-md"
-                                    }`}
+                                    className={`p-2.5 sm:p-3 rounded-2xl ${isMine
+                                      ? "bg-primary text-primary-foreground rounded-br-md"
+                                      : "bg-muted rounded-bl-md"
+                                      }`}
                                   >
                                     {message.isVoice ? (
                                       <div className="flex items-center gap-2">
@@ -747,9 +585,8 @@ export default function Messages() {
                                       <button
                                         key={r.emoji}
                                         onClick={() => handleReaction(message.id, r.emoji)}
-                                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border ${
-                                          r.byMe ? "border-primary bg-primary/10" : "border-border bg-muted"
-                                        }`}
+                                        className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border ${r.byMe ? "border-primary bg-primary/10" : "border-border bg-muted"
+                                          }`}
                                       >
                                         {r.emoji}
                                         {r.count > 1 && <span className="text-[10px]">{r.count}</span>}
@@ -759,9 +596,8 @@ export default function Messages() {
                                 )}
 
                                 <div
-                                  className={`flex items-center gap-1 mt-1 px-1 ${
-                                    isMine ? "justify-end" : "justify-start"
-                                  }`}
+                                  className={`flex items-center gap-1 mt-1 px-1 ${isMine ? "justify-end" : "justify-start"
+                                    }`}
                                 >
                                   <span className="text-[10px] text-muted-foreground">{message.time}</span>
                                   {isMine && <DeliveryIndicator status={message.status} />}

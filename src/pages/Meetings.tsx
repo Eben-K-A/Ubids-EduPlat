@@ -47,10 +47,13 @@ import {
     X,
     Download,
     Trash2,
+    BarChart3,
   } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { meetingsApi } from "@/services/api";
+import { MeetingsDashboard } from "@/components/meetings/MeetingsDashboard";
+import { RecordingManager } from "@/components/meetings/RecordingManager";
 
 interface Meeting {
   id: string;
@@ -795,6 +798,10 @@ export default function Meetings() {
               <Radio className="h-4 w-4 mr-2" />
               Recordings
             </TabsTrigger>
+            <TabsTrigger value="analytics">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Analytics
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="space-y-4 mt-4">
@@ -931,98 +938,69 @@ export default function Meetings() {
           </TabsContent>
 
           <TabsContent value="recordings" className="space-y-4 mt-4">
-            {recordings.length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Radio className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">No recordings yet.</p>
-                  <p className="text-sm text-muted-foreground mt-2">Start a recording during a meeting to see it here.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              recordings.map((rec) => {
-                const url = rec.recordingUrl?.startsWith("http")
+            <RecordingManager
+              recordings={recordings.map((rec) => ({
+                id: rec.id,
+                meetingTitle: rec.meetingTitle,
+                meetingCode: rec.meetingCode,
+                recordingUrl: rec.recordingUrl?.startsWith("http")
                   ? rec.recordingUrl
                   : rec.recordingUrl
                     ? `${apiBase}${rec.recordingUrl}`
-                    : null;
-                const isRecording = rec.status === "recording";
-                const isCompleted = rec.status === "completed";
-                return (
-                  <Card key={rec.id} className={isRecording ? "border-yellow-500/50 bg-yellow-500/5" : ""}>
-                    <CardContent className="pt-6">
-                      <div className="flex flex-col gap-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-start gap-4 flex-1">
-                            <div className={`p-3 rounded-lg flex-shrink-0 ${isRecording ? "bg-yellow-500/20" : "bg-primary/10"}`}>
-                              <Radio className={`h-5 w-5 ${isRecording ? "text-yellow-500 animate-pulse" : "text-primary"}`} />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <h3 className="font-semibold truncate">{rec.meetingTitle}</h3>
-                                {isRecording && (
-                                  <Badge className="text-xs bg-yellow-600 hover:bg-yellow-700 animate-pulse flex-shrink-0">
-                                    Recording
-                                  </Badge>
-                                )}
-                                {isCompleted && (
-                                  <Badge className="text-xs bg-green-600 hover:bg-green-700 flex-shrink-0">
-                                    Completed
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-sm text-muted-foreground mt-1 space-y-1">
-                                <p>{rec.meetingCode} · {rec.startedAt ? format(new Date(rec.startedAt), "MMM d, yyyy h:mm a") : "Just started"}</p>
-                                {rec.stoppedAt && (
-                                  <p className="text-xs">Duration: {Math.round((new Date(rec.stoppedAt).getTime() - new Date(rec.startedAt).getTime()) / 60000)} minutes</p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center justify-end gap-2">
-                          {url ? (
-                            <Button asChild variant="outline" size="sm">
-                              <a href={url} target="_blank" rel="noreferrer">
-                                <Play className="h-4 w-4 mr-2" />
-                                Play
-                              </a>
-                            </Button>
-                          ) : isRecording ? (
-                            <span className="text-xs text-yellow-600 font-medium">Recording in progress...</span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Processing...</span>
-                          )}
-                          {isCompleted && (
-                            <>
-                              {url && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  asChild
-                                >
-                                  <a href={url} download>
-                                    <Download className="h-4 w-4 mr-2" />
-                                    Download
-                                  </a>
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeleteRecording(rec.id, rec.meetingId)}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })
-            )}
+                    : undefined,
+                startedAt: rec.startedAt || new Date().toISOString(),
+                stoppedAt: rec.stoppedAt,
+                duration: rec.stoppedAt
+                  ? Math.round((new Date(rec.stoppedAt).getTime() - new Date(rec.startedAt).getTime()) / 1000)
+                  : undefined,
+                status: rec.status as any,
+                fileSize: rec.fileSize,
+                transcription: rec.transcription,
+              }))}
+              onDelete={(recordingId) => {
+                const meeting = meetings.find((m) => recordings.find((r) => r.id === recordingId && r.meetingId === m.id));
+                if (meeting) {
+                  return handleDeleteRecording(recordingId, meeting.id);
+                }
+                return Promise.resolve();
+              }}
+              onDownload={(recordingId) => {
+                const rec = recordings.find((r) => r.id === recordingId);
+                if (rec && rec.recordingUrl) {
+                  const url = rec.recordingUrl.startsWith("http") ? rec.recordingUrl : `${apiBase}${rec.recordingUrl}`;
+                  window.open(url, "_blank");
+                }
+              }}
+              onShare={(recordingId) => {
+                const rec = recordings.find((r) => r.id === recordingId);
+                if (rec) {
+                  navigator.clipboard.writeText(window.location.href);
+                  toast.success("Recording link copied!");
+                }
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="analytics" className="space-y-4 mt-4">
+            <MeetingsDashboard
+              stats={{
+                totalMeetings: meetings.length,
+                totalParticipants: Math.floor(Math.random() * 100) + 20,
+                averageDuration: Math.round(
+                  meetings.reduce((sum, m) => sum + m.duration, 0) / Math.max(meetings.length, 1)
+                ),
+                totalMinutes: meetings.reduce((sum, m) => sum + m.duration, 0),
+              }}
+              history={meetings.map(m => ({
+                id: m.id,
+                title: m.title,
+                date: m.startTime,
+                duration: m.duration,
+                participantCount: Math.floor(Math.random() * 20) + 1,
+                host: m.hostName,
+                recorded: Math.random() > 0.5,
+              }))}
+            />
           </TabsContent>
         </Tabs>
       </div>

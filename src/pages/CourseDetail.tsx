@@ -38,6 +38,7 @@ import { CreateQuizDialog } from "@/components/quizzes/CreateQuizDialog";
 import { ModuleLessonManager } from "@/components/courses/ModuleLessonManager";
 import { ClassStream } from "@/components/classroom/ClassStream";
 import { ClassCodeCard } from "@/components/classroom/ClassCodeCard";
+import { FileManager } from "@/components/files/FileManager";
 import { MaterialsList } from "@/components/classroom/MaterialsList";
 import { TopicManager } from "@/components/classroom/TopicManager";
 import { RubricEditor } from "@/components/classroom/RubricEditor";
@@ -217,6 +218,10 @@ export default function CourseDetail() {
               <FolderOpen className="h-3.5 w-3.5" />
               Materials
             </TabsTrigger>
+            <TabsTrigger value="files" className="gap-1.5">
+              <FolderOpen className="h-3.5 w-3.5" />
+              Files
+            </TabsTrigger>
             <TabsTrigger value="assignments" className="gap-1.5">
               <FileText className="h-3.5 w-3.5" />
               Assignments
@@ -314,6 +319,15 @@ export default function CourseDetail() {
           {/* Materials Tab */}
           <TabsContent value="materials" className="space-y-4">
             <MaterialsList courseId={courseId!} isOwner={isOwner || false} />
+          </TabsContent>
+
+          {/* Files Tab */}
+          <TabsContent value="files" className="space-y-4">
+            <FileManager
+              courseId={courseId}
+              title={`Files for ${course.code}`}
+              description="Manage and share files specifically for this course."
+            />
           </TabsContent>
 
           {/* Assignments Tab */}

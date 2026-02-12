@@ -1,10 +1,10 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCourses } from "@/contexts/CourseContext";
-import { useAssignments } from "@/contexts/AssignmentContext";
+import { useAnalytics } from "@/hooks/useApi";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AreaChart,
   Area,
@@ -29,80 +29,67 @@ import {
   Clock,
   CheckCircle2,
   Target,
+  AlertCircle
 } from "lucide-react";
-
-const COLORS = ["hsl(var(--primary))", "hsl(var(--accent))", "hsl(var(--success))", "hsl(var(--warning))"];
 
 export default function Analytics() {
   const { user } = useAuth();
-  const { courses, enrollments, getMyCourses, getMyEnrolledCourses } = useCourses();
-  const { assignments, quizzes, submissions, quizAttempts } = useAssignments();
+  const { data: analyticsData, isLoading, error } = useAnalytics();
 
   const isLecturer = user?.role === "lecturer" || user?.role === "admin";
-  const myCourses = getMyCourses();
-  const myEnrolledCourses = getMyEnrolledCourses();
 
-  // Mock engagement data
-  const engagementData = [
-    { week: "Week 1", students: 45, completions: 38 },
-    { week: "Week 2", students: 52, completions: 44 },
-    { week: "Week 3", students: 49, completions: 41 },
-    { week: "Week 4", students: 58, completions: 52 },
-    { week: "Week 5", students: 62, completions: 55 },
-    { week: "Week 6", students: 68, completions: 61 },
-  ];
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="space-y-6">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-4 w-4 rounded-full" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-16 mb-1" />
+                  <Skeleton className="h-3 w-32" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Skeleton className="h-[300px] w-full" />
+            <Skeleton className="h-[300px] w-full" />
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  // Assignment completion rate
-  const completionData = [
-    { name: "On Time", value: 75, color: "hsl(var(--success))" },
-    { name: "Late", value: 15, color: "hsl(var(--warning))" },
-    { name: "Missing", value: 10, color: "hsl(var(--destructive))" },
-  ];
+  if (error) {
+    return (
+      <DashboardLayout>
+        <div className="flex flex-col items-center justify-center py-12 text-center text-destructive">
+          <AlertCircle className="h-12 w-12 mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Failed to load analytics</h2>
+          <p>Please try again later.</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
-  // Course performance data
-  const coursePerformanceData = myCourses.slice(0, 5).map((course) => ({
-    name: course.code,
-    students: course.enrolledCount,
-    avgScore: Math.round(70 + Math.random() * 25),
-  }));
+  // Default empty structure if data is missing
+  const data = analyticsData || {};
 
-  // Quiz score distribution
-  const quizScoreData = [
-    { range: "0-20%", count: 2 },
-    { range: "21-40%", count: 5 },
-    { range: "41-60%", count: 12 },
-    { range: "61-80%", count: 25 },
-    { range: "81-100%", count: 18 },
-  ];
-
-  // Student progress for enrolled courses
-  const studentProgress = myEnrolledCourses.map((course) => ({
-    course: course.title,
-    progress: Math.round(Math.random() * 100),
-    assignmentsCompleted: Math.floor(Math.random() * 5),
-    quizzesCompleted: Math.floor(Math.random() * 3),
-  }));
-
-  const totalStudents = isLecturer
-    ? myCourses.reduce((acc, c) => acc + c.enrolledCount, 0)
-    : 0;
-
-  const totalSubmissions = isLecturer
-    ? submissions.filter((s) => 
-        assignments.some((a) => 
-          a.id === s.assignmentId && 
-          myCourses.some((c) => c.id === a.courseId)
-        )
-      ).length
-    : submissions.filter((s) => s.studentId === user?.id).length;
-
-  const totalQuizAttempts = isLecturer
-    ? quizAttempts.filter((a) =>
-        quizzes.some((q) =>
-          q.id === a.quizId && myCourses.some((c) => c.id === q.courseId)
-        )
-      ).length
-    : quizAttempts.filter((a) => a.studentId === user?.id).length;
+  // Use data from API or fallbacks
+  const engagementData = data.engagementData || [];
+  const completionData = data.completionData || [];
+  const quizScoreData = data.quizScoreData || [];
+  const coursePerformanceData = data.coursePerformance || [];
+  const studentProgress = data.studentProgress || [];
 
   return (
     <DashboardLayout>
@@ -132,7 +119,7 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {isLecturer ? totalStudents : myEnrolledCourses.length}
+                {isLecturer ? data.totalStudents : data.enrolledCourses}
               </div>
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <TrendingUp className="h-3 w-3 text-success" />
@@ -151,8 +138,8 @@ export default function Analytics() {
             <CardContent>
               <div className="text-2xl font-bold">
                 {isLecturer
-                  ? myCourses.filter((c) => c.status === "published").length
-                  : "72%"}
+                  ? data.activeCourses
+                  : `${data.avgProgress}%`}
               </div>
               <p className="text-xs text-muted-foreground">
                 {isLecturer ? "Currently published" : "Across all courses"}
@@ -168,7 +155,7 @@ export default function Analytics() {
               <FileText className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalSubmissions}</div>
+              <div className="text-2xl font-bold">{data.totalSubmissions}</div>
               <p className="text-xs text-muted-foreground">
                 {isLecturer ? "Total received" : "Total submitted"}
               </p>
@@ -183,7 +170,7 @@ export default function Analytics() {
               <Award className="h-4 w-4 text-warning" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalQuizAttempts}</div>
+              <div className="text-2xl font-bold">{data.totalQuizAttempts}</div>
               <p className="text-xs text-muted-foreground">
                 {isLecturer ? "Completed by students" : "Quizzes completed"}
               </p>
@@ -238,7 +225,9 @@ export default function Analytics() {
             </CardContent>
           </Card>
 
-          {/* Completion Rate Pie */}
+          {/* Completion Rate Pie -- Only for Lecturer usually, or adapted for student? 
+              For now keeping it as is, maybe useful for students too to see their breakdown
+           */}
           <Card>
             <CardHeader>
               <CardTitle>Assignment Completion</CardTitle>
@@ -246,36 +235,44 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={completionData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={5}
-                      dataKey="value"
-                    >
-                      {completionData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                {completionData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={completionData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {completionData.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No data available
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
 
-          {/* Quiz Score Distribution */}
+          {/* Quiz Score Distribution - Lecturer Only or Student? 
+              Lets show it for both for now (mocked on backend for both)
+          */}
           <Card>
             <CardHeader>
               <CardTitle>Quiz Score Distribution</CardTitle>
@@ -283,21 +280,27 @@ export default function Analytics() {
             </CardHeader>
             <CardContent>
               <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={quizScoreData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="range" className="text-xs" />
-                    <YAxis className="text-xs" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "8px",
-                      }}
-                    />
-                    <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Students" />
-                  </BarChart>
-                </ResponsiveContainer>
+                {quizScoreData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={quizScoreData}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="range" className="text-xs" />
+                      <YAxis className="text-xs" />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "hsl(var(--card))",
+                          border: "1px solid hsl(var(--border))",
+                          borderRadius: "8px",
+                        }}
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Students" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-full text-muted-foreground">
+                    No data available
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -315,21 +318,27 @@ export default function Analytics() {
             <CardContent>
               {isLecturer ? (
                 <div className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={coursePerformanceData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                      <XAxis type="number" domain={[0, 100]} className="text-xs" />
-                      <YAxis dataKey="name" type="category" className="text-xs" width={60} />
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: "hsl(var(--card))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Bar dataKey="avgScore" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} name="Avg Score %" />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  {coursePerformanceData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={coursePerformanceData} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis type="number" domain={[0, 100]} className="text-xs" />
+                        <YAxis dataKey="name" type="category" className="text-xs" width={60} />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                        />
+                        <Bar dataKey="avgScore" fill="hsl(var(--accent))" radius={[0, 4, 4, 0]} name="Avg Score %" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      No course performance data
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -338,7 +347,7 @@ export default function Analytics() {
                       Enroll in courses to see your progress
                     </p>
                   ) : (
-                    studentProgress.map((item, idx) => (
+                    studentProgress.map((item: any, idx: number) => (
                       <div key={idx} className="space-y-2">
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium truncate max-w-[200px]">
@@ -368,7 +377,7 @@ export default function Analytics() {
           </Card>
         </div>
 
-        {/* Recent Activity */}
+        {/* Recent Activity - Keeping mock for now as we don't have a recent activity feed endpoint yet */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Activity</CardTitle>
@@ -376,7 +385,7 @@ export default function Analytics() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map((_, idx) => (
+              {[1, 2, 3].map((_, idx) => (
                 <div
                   key={idx}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/50"

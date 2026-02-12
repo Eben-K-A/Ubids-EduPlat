@@ -7,7 +7,10 @@ import {
   useUpdateCourse,
   useDeleteCourse,
   useEnrollCourse,
+  useMyEnrollments,
 } from "@/hooks/useApi";
+import { coursesApi } from "@/services/api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface CourseContextType {
   courses: Course[] | undefined;
@@ -33,6 +36,16 @@ export function CourseProvider({ children }: { children: ReactNode }) {
   const updateCourseMutation = useUpdateCourse();
   const deleteCourseMutation = useDeleteCourse();
   const enrollMutation = useEnrollCourse();
+  const { data: enrollmentsData } = useMyEnrollments();
+  const queryClient = useQueryClient();
+
+  const unenrollMutation = useMutation({
+    mutationFn: (courseId: string) => coursesApi.unenroll(courseId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["enrollments"] });
+    },
+  });
 
   const createCourse = async (courseData: Omit<Course, "id" | "createdAt" | "updatedAt" | "lecturerId" | "lecturerName" | "enrolledCount">): Promise<Course> => {
     if (!user) throw new Error("Must be logged in to create a course");
@@ -58,18 +71,27 @@ export function CourseProvider({ children }: { children: ReactNode }) {
   };
 
   const unenrollFromCourse = async (courseId: string): Promise<void> => {
-    // Will be implemented when backend endpoint is available
-    throw new Error("Unenroll not yet implemented");
+    if (!user) throw new Error("Must be logged in to unenroll");
+    await unenrollMutation.mutateAsync(courseId);
   };
 
   const getCoursesWithEnrollment = (): CourseWithEnrollment[] => {
     if (!courses) return [];
 
-    return courses.map((course) => ({
-      ...course,
-      enrollment: undefined,
-      isEnrolled: false, // Will be determined from backend enrollment data
-    }));
+    const enrollments: Enrollment[] =
+      (enrollmentsData || []).map((e: any) => ({
+        ...e,
+        enrolledAt: new Date(e.enrolledAt),
+      }));
+
+    return courses.map((course) => {
+      const enrollment = enrollments.find((e) => e.courseId === course.id);
+      return {
+        ...course,
+        isEnrolled: Boolean(enrollment),
+        enrollment,
+      };
+    });
   };
 
   const getMyCourses = (): Course[] => {

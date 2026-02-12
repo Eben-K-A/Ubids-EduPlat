@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { coursesApi, assignmentsApi, usersApi, meetingsApi, ApiError } from "@/services/api";
+import { coursesApi, assignmentsApi, usersApi, meetingsApi, messagesApi, discussionsApi, filesApi, analyticsApi, ApiError } from "@/services/api";
 import { useCallback } from "react";
 
 // Courses hooks
@@ -55,7 +55,15 @@ export const useEnrollCourse = () => {
     mutationFn: (courseId: string) => coursesApi.enroll(courseId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["courses"] });
+      queryClient.invalidateQueries({ queryKey: ["enrollments"] });
     },
+  });
+};
+
+export const useMyEnrollments = () => {
+  return useQuery({
+    queryKey: ["enrollments"],
+    queryFn: () => coursesApi.myEnrollments(),
   });
 };
 
@@ -254,7 +262,155 @@ export const useDenyWaiting = () => {
   });
 };
 
+// Messages hooks
+export const useConversations = () => {
+  return useQuery({
+    queryKey: ["conversations"],
+    queryFn: () => messagesApi.listConversations(),
+    refetchInterval: 5000,
+  });
+};
+
+export const useCreateConversation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { type: string; participantIds: string[]; name?: string }) =>
+      messagesApi.createConversation(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+};
+
+export const useMessages = (conversationId: string) => {
+  return useQuery({
+    queryKey: ["messages", conversationId],
+    queryFn: () => messagesApi.getMessages(conversationId),
+    enabled: !!conversationId,
+    refetchInterval: 3000,
+  });
+};
+
+export const useSendMessage = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ conversationId, data }: { conversationId: string; data: any }) =>
+      messagesApi.sendMessage(conversationId, data),
+    onSuccess: (data, { conversationId }) => {
+      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+  });
+};
+
+export const useMarkConversationRead = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) => messagesApi.markConversationRead(conversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    }
+  });
+};
+
+export const useReactToMessage = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ messageId, emoji }: { messageId: string; emoji: string }) =>
+      messagesApi.reactToMessage(messageId, emoji),
+    onSuccess: () => {
+      // Invalidate all messages queries to update reactions
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+    },
+  });
+};
+
+// --- Discussions Hooks ---
+
+export const usePosts = (courseId?: string) => {
+  return useQuery({
+    queryKey: ["posts", courseId || "general"],
+    queryFn: () => discussionsApi.list(courseId),
+  });
+};
+
+export const usePost = (postId: string) => {
+  return useQuery({
+    queryKey: ["post", postId],
+    queryFn: () => discussionsApi.get(postId),
+    enabled: !!postId,
+  });
+};
+
+export const useCreatePost = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { title: string; content: string; courseId?: string }) => discussionsApi.create(data),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["posts", variables.courseId || "general"] });
+    },
+  });
+};
+
+export const useAddComment = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ postId, content }: { postId: string; content: string }) => discussionsApi.addComment(postId, content),
+    onSuccess: (data, { postId }) => {
+      queryClient.invalidateQueries({ queryKey: ["post", postId] });
+    },
+  });
+};
+
+export const useToggleLike = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (postId: string) => discussionsApi.toggleLike(postId),
+    onSuccess: (data, postId) => {
+      queryClient.invalidateQueries({ queryKey: ["post", postId] });
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+};
+
 // Error handling hook
+
+// Files Hooks
+export const useFiles = (courseId?: string) => {
+  return useQuery({
+    queryKey: ["files", courseId || "all"],
+    queryFn: () => filesApi.list(courseId),
+  });
+};
+
+export const useUploadFile = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, courseId }: { file: File; courseId?: string }) =>
+      filesApi.upload(file, courseId),
+    onSuccess: (data, { courseId }) => {
+      queryClient.invalidateQueries({ queryKey: ["files", courseId || "all"] });
+    },
+  });
+};
+
+export const useDeleteFile = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => filesApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+};
+
+export const useAnalytics = () => {
+  return useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => analyticsApi.getStats(),
+  });
+};
+
 export const useApiErrorHandler = () => {
   return useCallback((error: unknown) => {
     if (error instanceof ApiError) {
@@ -272,3 +428,4 @@ export const useApiErrorHandler = () => {
     return "An error occurred";
   }, []);
 };
+
