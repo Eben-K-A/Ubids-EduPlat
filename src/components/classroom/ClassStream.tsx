@@ -14,8 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Pin, MoreVertical, Trash2, Send, MessageCircle } from "lucide-react";
-import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { safeFormatDate } from "@/lib/utils";
 
 interface ClassStreamProps {
   courseId: string;
@@ -193,7 +193,7 @@ export function ClassStream({ courseId, isOwner }: ClassStreamProps) {
                           <span className="text-xs font-medium">{comment.authorName}</span>
                           <div className="flex items-center gap-1">
                             <span className="text-[10px] text-muted-foreground">
-                              {format(new Date(comment.createdAt), "MMM d")}
+                              {safeFormatDate(comment.createdAt, "MMM d")}
                             </span>
                             {(isOwner || comment.authorId === user?.id) && (
                               <Button

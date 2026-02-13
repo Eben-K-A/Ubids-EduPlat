@@ -31,7 +31,7 @@ import {
   FolderOpen,
   ClipboardCheck,
 } from "lucide-react";
-import { format } from "date-fns";
+import { safeFormatDate } from "@/lib/utils";
 import { EditCourseDialog } from "@/components/courses/EditCourseDialog";
 import { CreateAssignmentDialog } from "@/components/assignments/CreateAssignmentDialog";
 import { CreateQuizDialog } from "@/components/quizzes/CreateQuizDialog";
@@ -366,7 +366,7 @@ export default function CourseDetail() {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          Due: {format(new Date(assignment.dueDate), "MMM d, yyyy")}
+                          Due: {safeFormatDate(assignment.dueDate, "MMM d, yyyy")}
                         </div>
                         <div className="flex items-center gap-1">
                           <FileText className="h-4 w-4" />
@@ -462,13 +462,13 @@ export default function CourseDetail() {
                   <div>
                     <h4 className="font-semibold mb-2">Created</h4>
                     <p className="text-muted-foreground">
-                      {format(new Date(course.createdAt), "MMMM d, yyyy")}
+                      {safeFormatDate(course.createdAt, "MMMM d, yyyy")}
                     </p>
                   </div>
                   <div>
                     <h4 className="font-semibold mb-2">Last Updated</h4>
                     <p className="text-muted-foreground">
-                      {format(new Date(course.updatedAt), "MMMM d, yyyy")}
+                      {safeFormatDate(course.updatedAt, "MMMM d, yyyy")}
                     </p>
                   </div>
                 </div>

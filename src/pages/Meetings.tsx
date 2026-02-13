@@ -49,9 +49,9 @@ import {
     Trash2,
     BarChart3,
   } from "lucide-react";
-import { format } from "date-fns";
 import { toast } from "sonner";
 import { meetingsApi } from "@/services/api";
+import { safeFormatDate } from "@/lib/utils";
 import { MeetingsDashboard } from "@/components/meetings/MeetingsDashboard";
 import { RecordingManager } from "@/components/meetings/RecordingManager";
 
@@ -858,11 +858,11 @@ export default function Meetings() {
                     <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
-                        {format(new Date(meeting.startTime), "EEE, MMM d")}
+                        {safeFormatDate(meeting.startTime, "EEE, MMM d")}
                       </div>
                       <div className="flex items-center gap-1">
                         <Clock className="h-4 w-4" />
-                        {format(new Date(meeting.startTime), "h:mm a")} ({meeting.duration} min)
+                        {safeFormatDate(meeting.startTime, "h:mm a")} ({meeting.duration} min)
                       </div>
                       <div className="flex items-center gap-1">
                         <Users className="h-4 w-4" />
@@ -920,7 +920,7 @@ export default function Meetings() {
                   <div className="flex flex-wrap gap-4 text-sm text-muted-foreground mb-4">
                     <div className="flex items-center gap-1">
                       <Calendar className="h-4 w-4" />
-                      {format(new Date(meeting.startTime), "EEE, MMM d, yyyy")}
+                      {safeFormatDate(meeting.startTime, "EEE, MMM d, yyyy")}
                     </div>
                     <div className="flex items-center gap-1">
                       <Clock className="h-4 w-4" />

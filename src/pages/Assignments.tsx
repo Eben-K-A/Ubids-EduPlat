@@ -18,7 +18,8 @@ import { CreateAssignmentDialog } from "@/components/assignments/CreateAssignmen
 import { SubmitAssignmentDialog } from "@/components/assignments/SubmitAssignmentDialog";
 import { ViewSubmissionsDialog } from "@/components/assignments/ViewSubmissionsDialog";
 import { Search, Calendar, FileText, CheckCircle2, AlertCircle, MessageSquare } from "lucide-react";
-import { format, isPast, isFuture } from "date-fns";
+import { isPast, isFuture } from "date-fns";
+import { safeFormatDate } from "@/lib/utils";
 
 export default function Assignments() {
   const { user } = useAuth();
@@ -157,7 +158,7 @@ export default function Assignments() {
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          Due: {format(new Date(assignment.dueDate), "MMM d, yyyy h:mm a")}
+                          Due: {safeFormatDate(assignment.dueDate, "MMM d, yyyy h:mm a")}
                         </div>
                         <div className="flex items-center gap-1">
                           <FileText className="h-4 w-4" />

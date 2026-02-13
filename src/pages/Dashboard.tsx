@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { BookOpen, Users, Calendar, Bell, ArrowRight, Plus, FileText, Award, Clock } from "lucide-react";
 import { useNavigate, Navigate } from "react-router-dom";
 import { CreateCourseDialog } from "@/components/courses/CreateCourseDialog";
-import { format, isPast, isFuture } from "date-fns";
+import { isPast, isFuture } from "date-fns";
+import { safeFormatDate } from "@/lib/utils";
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -308,7 +309,7 @@ export default function Dashboard() {
                           <>
                             <p className="text-xs text-muted-foreground flex items-center gap-1">
                               <Clock className="h-3 w-3" />
-                              {format(new Date(assignment.dueDate), "MMM d")}
+                              {safeFormatDate(assignment.dueDate, "MMM d")}
                             </p>
                           </>
                         )}
