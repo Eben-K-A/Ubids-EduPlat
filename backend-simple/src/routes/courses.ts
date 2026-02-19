@@ -110,7 +110,8 @@ coursesRoutes.put('/:id', async (req: Request, res: Response) => {
       UPDATE courses SET title = $1, description = $2, maxEnrollment = $3, updatedAt = $4 WHERE id = $5
     `, [title || course.title, description || course.description, maxEnrollment || course.maxEnrollment, now, req.params.id]);
 
-    res.json({ message: 'Course updated' });
+    const updatedResult = await db.query('SELECT * FROM courses WHERE id = $1', [req.params.id]);
+    res.json(updatedResult.rows[0]);
   } catch (error) {
     console.error('Error updating course:', error);
     res.status(500).json({ message: 'Internal server error' });
