@@ -12,10 +12,10 @@ modulesRoutes.get('/', async (req: Request, res: Response) => {
     let modulesQuery = 'SELECT * FROM modules';
     const params: any[] = [];
     if (courseId) {
-      modulesQuery += ' WHERE "courseId" = $1';
+      modulesQuery += ' WHERE courseid = $1';
       params.push(courseId);
     }
-    modulesQuery += ' ORDER BY "courseId", "orderIndex" ASC';
+    modulesQuery += ' ORDER BY courseid, orderindex ASC';
 
     const modulesResult = await db.query(modulesQuery, params);
     const modules = modulesResult.rows;
@@ -28,21 +28,41 @@ modulesRoutes.get('/', async (req: Request, res: Response) => {
     const placeholders = moduleIds.map((_, i) => `$${i + 1}`).join(',');
 
     const lessonsResult = await db.query(
-      `SELECT * FROM lessons WHERE "moduleId" IN (${placeholders}) ORDER BY "orderIndex" ASC`,
+      `SELECT * FROM lessons WHERE moduleid IN (${placeholders}) ORDER BY orderindex ASC`,
       moduleIds
     );
     const lessons = lessonsResult.rows;
 
     const lessonsByModule = new Map<string, any[]>();
     lessons.forEach((lesson: any) => {
-      const list = lessonsByModule.get(lesson.moduleId) ?? [];
+      const mid = lesson.moduleid ?? lesson.moduleId;
+      const list = lessonsByModule.get(mid) ?? [];
       list.push(lesson);
-      lessonsByModule.set(lesson.moduleId, list);
+      lessonsByModule.set(mid, list);
     });
 
     const result = modules.map((m: any) => ({
-      ...m,
-      lessons: lessonsByModule.get(m.id) ?? [],
+      id: m.id,
+      courseId: m.courseid ?? m.courseId,
+      title: m.title,
+      description: m.description,
+      orderIndex: m.orderindex ?? m.orderIndex,
+      createdAt: m.createdat ?? m.createdAt,
+      updatedAt: m.updatedat ?? m.updatedAt,
+      order: m.orderindex ?? m.orderIndex ?? m.order,
+      lessons: (lessonsByModule.get(m.id) ?? []).map((l: any) => ({
+        id: l.id,
+        moduleId: l.moduleid ?? l.moduleId,
+        title: l.title,
+        content: l.content,
+        type: l.type,
+        duration: l.duration,
+        orderIndex: l.orderindex ?? l.orderIndex,
+        order: l.orderindex ?? l.orderIndex ?? l.order,
+        resourceUrl: l.resourceurl ?? l.resourceUrl,
+        createdAt: l.createdat ?? l.createdAt,
+        updatedAt: l.updatedat ?? l.updatedAt,
+      })),
     }));
 
     res.json(result);
@@ -111,8 +131,8 @@ modulesRoutes.put('/:id', async (req: Request, res: Response) => {
       `UPDATE modules
        SET title = COALESCE($1, title),
            description = COALESCE($2, description),
-           orderIndex = COALESCE($3, orderIndex),
-           updatedAt = $4
+           orderindex = COALESCE($3, orderindex),
+           updatedat = $4
        WHERE id = $5`,
       [
         title ?? null,
@@ -128,7 +148,7 @@ modulesRoutes.put('/:id', async (req: Request, res: Response) => {
 
     res.json({
       ...updated,
-      order: updated.orderIndex,
+      order: updated.orderindex ?? updated.orderIndex,
     });
   } catch (error) {
     console.error('Error updating module:', error);
@@ -139,7 +159,7 @@ modulesRoutes.put('/:id', async (req: Request, res: Response) => {
 // Delete module (and its lessons)
 modulesRoutes.delete('/:id', async (req: Request, res: Response) => {
   try {
-    await db.query('DELETE FROM lessons WHERE "moduleId" = $1', [req.params.id]);
+    await db.query('DELETE FROM lessons WHERE moduleid = $1', [req.params.id]);
     await db.query('DELETE FROM modules WHERE id = $1', [req.params.id]);
     res.json({ message: 'Module deleted' });
   } catch (error) {
@@ -205,7 +225,7 @@ modulesRoutes.post('/:moduleId/lessons', async (req: Request, res: Response) => 
 // Update lesson
 modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Response) => {
   try {
-    const lessonResult = await db.query('SELECT * FROM lessons WHERE id = $1 AND "moduleId" = $2', [req.params.lessonId, req.params.moduleId]);
+    const lessonResult = await db.query('SELECT * FROM lessons WHERE id = $1 AND moduleid = $2', [req.params.lessonId, req.params.moduleId]);
     const lesson = lessonResult.rows[0];
 
     if (!lesson) {
@@ -221,10 +241,10 @@ modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Resp
            content = COALESCE($2, content),
            type = COALESCE($3, type),
            duration = COALESCE($4, duration),
-           orderIndex = COALESCE($5, orderIndex),
-           resourceUrl = COALESCE($6, resourceUrl),
-           updatedAt = $7
-       WHERE id = $8 AND moduleId = $9`,
+           orderindex = COALESCE($5, orderindex),
+           resourceurl = COALESCE($6, resourceurl),
+           updatedat = $7
+       WHERE id = $8 AND moduleid = $9`,
       [
         title ?? null,
         content ?? null,
@@ -238,12 +258,12 @@ modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Resp
       ]
     );
 
-    const updatedResult = await db.query('SELECT * FROM lessons WHERE id = $1 AND moduleId = $2', [req.params.lessonId, req.params.moduleId]);
+    const updatedResult = await db.query('SELECT * FROM lessons WHERE id = $1 AND moduleid = $2', [req.params.lessonId, req.params.moduleId]);
     const updated = updatedResult.rows[0];
 
     res.json({
       ...updated,
-      order: updated.orderIndex,
+      order: updated.orderindex ?? updated.orderIndex,
     });
   } catch (error) {
     console.error('Error updating lesson:', error);
@@ -254,7 +274,7 @@ modulesRoutes.put('/:moduleId/lessons/:lessonId', async (req: Request, res: Resp
 // Delete lesson
 modulesRoutes.delete('/:moduleId/lessons/:lessonId', async (req: Request, res: Response) => {
   try {
-    await db.query('DELETE FROM lessons WHERE id = $1 AND moduleId = $2', [req.params.lessonId, req.params.moduleId]);
+    await db.query('DELETE FROM lessons WHERE id = $1 AND moduleid = $2', [req.params.lessonId, req.params.moduleId]);
     res.json({ message: 'Lesson deleted' });
   } catch (error) {
     console.error('Error deleting lesson:', error);

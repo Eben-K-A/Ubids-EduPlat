@@ -51,10 +51,31 @@ const getRecordingOutput = (meetingCode: string) => {
   return { filepath, recordingUrl };
 };
 
+/** Normalize meeting row from DB (PostgreSQL returns lowercase column names) */
+const normMeeting = (m: any) => {
+  if (!m) return m;
+  return {
+    ...m,
+    meetingCode: m.meetingcode ?? m.meetingCode,
+    startTime: m.starttime ?? m.startTime,
+    hostId: m.hostid ?? m.hostId,
+    hostName: m.hostname ?? m.hostName,
+    waitingRoomMode: m.waitingroommode ?? m.waitingRoomMode,
+    isRecurring: m.isrecurring ?? m.isRecurring,
+    recurringPattern: m.recurringpattern ?? m.recurringPattern,
+    hasWaitingRoom: m.haswaitingroom ?? m.hasWaitingRoom,
+    isPasswordProtected: m.ispasswordprotected ?? m.isPasswordProtected,
+    recordingEnabled: m.recordingenabled ?? m.recordingEnabled,
+    createdAt: m.createdat ?? m.createdAt,
+    updatedAt: m.updatedat ?? m.updatedAt,
+  };
+};
+
 const isHostOrAdmin = (meeting: any, user?: { id: string; role: string }) => {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  return meeting.hostId && user.id === meeting.hostId;
+  const hostId = meeting.hostId ?? meeting.hostid;
+  return hostId && user.id === hostId;
 };
 
 const expandRecurringMeeting = async (baseMeeting: any, occurrences: number = 12) => {
@@ -63,8 +84,8 @@ const expandRecurringMeeting = async (baseMeeting: any, occurrences: number = 12
   }
 
   const meetings = [baseMeeting];
-  const startDate = new Date(baseMeeting.startTime);
-  const pattern = baseMeeting.recurringPattern.toLowerCase();
+  const startDate = new Date(baseMeeting.startTime ?? baseMeeting.starttime);
+  const pattern = ((baseMeeting.recurringPattern ?? baseMeeting.recurringpattern) || '').toLowerCase();
   let interval = 1;
 
   switch (pattern) {
@@ -131,20 +152,23 @@ const expandRecurringMeeting = async (baseMeeting: any, occurrences: number = 12
 meetingsRoutes.get('/', async (req: Request, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().toLowerCase();
-    const result = await db.query('SELECT * FROM meetings ORDER BY "startTime" ASC');
+    const result = await db.query('SELECT * FROM meetings ORDER BY starttime ASC');
     const rows = result.rows;
     const filtered = q
       ? rows.filter((m: any) => m.title.toLowerCase().includes(q) || (m.description || '').toLowerCase().includes(q))
       : rows;
     res.json({
-      data: filtered.map((m: any) => ({
-        ...m,
-        waitingRoomMode: m.waitingRoomMode ?? 'auto',
-        isRecurring: Boolean(m.isRecurring),
-        hasWaitingRoom: Boolean(m.hasWaitingRoom),
-        isPasswordProtected: Boolean(m.isPasswordProtected),
-        recordingEnabled: Boolean(m.recordingEnabled),
-      })),
+      data: filtered.map((m: any) => {
+        const row = normMeeting(m);
+        return {
+          ...row,
+          waitingRoomMode: row.waitingRoomMode ?? 'auto',
+          isRecurring: Boolean(row.isRecurring),
+          hasWaitingRoom: Boolean(row.hasWaitingRoom),
+          isPasswordProtected: Boolean(row.isPasswordProtected),
+          recordingEnabled: Boolean(row.recordingEnabled),
+        };
+      }),
     });
   } catch (error) {
     console.error('Error fetching meetings:', error);
@@ -155,8 +179,8 @@ meetingsRoutes.get('/', async (req: Request, res: Response) => {
 meetingsRoutes.get('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const result = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
-    const meeting = result.rows[0];
+    const result = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [id, id]);
+    const meeting = normMeeting(result.rows[0]);
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
@@ -250,7 +274,7 @@ meetingsRoutes.post('/', async (req: Request, res: Response) => {
     ]);
 
     const result = await db.query('SELECT * FROM meetings WHERE id = $1', [id]);
-    const meeting = result.rows[0];
+    const meeting = normMeeting(result.rows[0]);
 
     // If recurring, expand to create multiple instances
     if (isRecurring) {
@@ -276,8 +300,8 @@ meetingsRoutes.post('/', async (req: Request, res: Response) => {
 meetingsRoutes.post('/:id/join', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const result = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
-    const meeting = result.rows[0];
+    const result = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [id, id]);
+    const meeting = normMeeting(result.rows[0]);
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
@@ -324,7 +348,7 @@ meetingsRoutes.post('/:id/join', async (req: Request, res: Response) => {
     const identity = `guest-${randomUUID()}`;
     const now = new Date().toISOString();
     await db.query(`
-      INSERT INTO meeting_waiting_requests (id, meetingId, name, userId, identity, status, createdAt, updatedAt)
+      INSERT INTO meeting_waiting_requests (id, meetingid, name, userid, identity, status, createdat, updatedat)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [requestId, meeting.id, name, req.user?.id ?? null, identity, 'pending', now, now]);
 
@@ -342,15 +366,15 @@ meetingsRoutes.post('/:id/join', async (req: Request, res: Response) => {
 
 meetingsRoutes.get('/:id/waiting', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const rowsResult = await db.query('SELECT * FROM meeting_waiting_requests WHERE "meetingId" = $1 AND status = $2 ORDER BY "createdAt" ASC', [meeting.id, 'pending']);
+    const rowsResult = await db.query('SELECT * FROM meeting_waiting_requests WHERE meetingid = $1 AND status = $2 ORDER BY createdat ASC', [meeting.id, 'pending']);
     res.json({ data: rowsResult.rows });
   } catch (error) {
     console.error('Error fetching waiting requests:', error);
@@ -360,12 +384,12 @@ meetingsRoutes.get('/:id/waiting', async (req: Request, res: Response) => {
 
 meetingsRoutes.get('/:id/waiting/:requestId', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ data: null, message: 'Meeting not found' });
 
-    const requestResult = await db.query('SELECT * FROM meeting_waiting_requests WHERE id = $1 AND "meetingId" = $2', [req.params.requestId, meeting.id]);
+    const requestResult = await db.query('SELECT * FROM meeting_waiting_requests WHERE id = $1 AND meetingid = $2', [req.params.requestId, meeting.id]);
     const request = requestResult.rows[0];
 
     if (!request) return res.status(404).json({ data: null, message: 'Request not found' });
@@ -398,8 +422,8 @@ meetingsRoutes.get('/:id/waiting/:requestId', async (req: Request, res: Response
 
 meetingsRoutes.post('/:id/waiting/:requestId/approve', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ data: null, message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
@@ -409,8 +433,8 @@ meetingsRoutes.post('/:id/waiting/:requestId/approve', async (req: Request, res:
     const now = new Date().toISOString();
     await db.query(`
       UPDATE meeting_waiting_requests
-      SET status = 'approved', "updatedAt" = $1
-      WHERE id = $2 AND "meetingId" = $3
+      SET status = 'approved', updatedat = $1
+      WHERE id = $2 AND meetingid = $3
     `, [now, req.params.requestId, meeting.id]);
 
     res.json({ data: { status: 'approved' } });
@@ -422,8 +446,8 @@ meetingsRoutes.post('/:id/waiting/:requestId/approve', async (req: Request, res:
 
 meetingsRoutes.post('/:id/waiting/:requestId/deny', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ data: null, message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
@@ -433,8 +457,8 @@ meetingsRoutes.post('/:id/waiting/:requestId/deny', async (req: Request, res: Re
     const now = new Date().toISOString();
     await db.query(`
       UPDATE meeting_waiting_requests
-      SET status = 'denied', "updatedAt" = $1
-      WHERE id = $2 AND "meetingId" = $3
+      SET status = 'denied', updatedat = $1
+      WHERE id = $2 AND meetingid = $3
     `, [now, req.params.requestId, meeting.id]);
 
     res.json({ data: { status: 'denied' } });
@@ -447,8 +471,8 @@ meetingsRoutes.post('/:id/waiting/:requestId/deny', async (req: Request, res: Re
 meetingsRoutes.put('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [id, id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ data: null, message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
@@ -502,16 +526,16 @@ meetingsRoutes.put('/:id', async (req: Request, res: Response) => {
       UPDATE meetings SET
         title = COALESCE($1, title),
         description = COALESCE($2, description),
-        startTime = COALESCE($3, startTime),
+        starttime = COALESCE($3, starttime),
         duration = COALESCE($4, duration),
-        waitingRoomMode = COALESCE($5, waitingRoomMode),
-        isRecurring = COALESCE($6, isRecurring),
-        recurringPattern = COALESCE($7, recurringPattern),
-        hasWaitingRoom = COALESCE($8, hasWaitingRoom),
-        isPasswordProtected = COALESCE($9, isPasswordProtected),
-        recordingEnabled = COALESCE($10, recordingEnabled),
+        waitingroommode = COALESCE($5, waitingroommode),
+        isrecurring = COALESCE($6, isrecurring),
+        recurringpattern = COALESCE($7, recurringpattern),
+        haswaitingroom = COALESCE($8, haswaitingroom),
+        ispasswordprotected = COALESCE($9, ispasswordprotected),
+        recordingenabled = COALESCE($10, recordingenabled),
         password = CASE WHEN $11 IS NOT NULL THEN $12 WHEN password IS NULL THEN NULL ELSE password END,
-        updatedAt = $13
+        updatedat = $13
       WHERE id = $14
     `, [
       title ?? null,
@@ -531,7 +555,7 @@ meetingsRoutes.put('/:id', async (req: Request, res: Response) => {
     ]);
 
     const updatedResult = await db.query('SELECT * FROM meetings WHERE id = $1', [id]);
-    const updated = updatedResult.rows[0];
+    const updated = normMeeting(updatedResult.rows[0]);
 
     res.json({
       data: {
@@ -552,16 +576,16 @@ meetingsRoutes.put('/:id', async (req: Request, res: Response) => {
 meetingsRoutes.delete('/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id;
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [id, id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [id, id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ data: null, message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
       return res.status(403).json({ data: null, message: 'Not authorized' });
     }
 
-    await db.query('DELETE FROM meeting_waiting_requests WHERE meetingId = $1', [meeting.id]);
-    await db.query('DELETE FROM meeting_recordings WHERE meetingId = $1', [meeting.id]);
+    await db.query('DELETE FROM meeting_waiting_requests WHERE meetingid = $1', [meeting.id]);
+    await db.query('DELETE FROM meeting_recordings WHERE meetingid = $1', [meeting.id]);
     await db.query('DELETE FROM meetings WHERE id = $1', [meeting.id]);
 
     res.json({ data: null, message: 'Meeting deleted' });
@@ -573,12 +597,12 @@ meetingsRoutes.delete('/:id', async (req: Request, res: Response) => {
 
 meetingsRoutes.get('/:id/recordings', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
 
-    const rowsResult = await db.query('SELECT * FROM meeting_recordings WHERE meetingId = $1 ORDER BY createdAt DESC', [meeting.id]);
+    const rowsResult = await db.query('SELECT * FROM meeting_recordings WHERE meetingid = $1 ORDER BY createdat DESC', [meeting.id]);
     res.json({ data: rowsResult.rows });
   } catch (error) {
     console.error('Error fetching recordings:', error);
@@ -588,15 +612,15 @@ meetingsRoutes.get('/:id/recordings', async (req: Request, res: Response) => {
 
 meetingsRoutes.post('/:id/recordings/start', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingCode = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const activeResult = await db.query('SELECT * FROM meeting_recordings WHERE meetingId = $1 AND status = $2', [meeting.id, 'recording']);
+    const activeResult = await db.query('SELECT * FROM meeting_recordings WHERE meetingid = $1 AND status = $2', [meeting.id, 'recording']);
     const active = activeResult.rows[0];
 
     if (active) return res.status(400).json({ message: 'Recording already in progress' });
@@ -652,7 +676,7 @@ meetingsRoutes.post('/:id/recordings/start', async (req: Request, res: Response)
 
     const egressId = (egress as any)?.egressId;
     await db.query(`
-      INSERT INTO meeting_recordings (id, meetingId, egressId, status, startedAt, recordingUrl, createdAt, updatedAt)
+      INSERT INTO meeting_recordings (id, meetingid, egressid, status, startedat, recordingurl, createdat, updatedat)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `, [id, meeting.id, egressId ?? null, 'recording', now, recordingUrl, now, now]);
 
@@ -674,21 +698,22 @@ meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Respon
     const pmResult = await db.query(`
       SELECT pm.*, m.* 
       FROM personal_meetings pm 
-      JOIN meetings m ON pm.meetingId = m.id 
-      WHERE pm.userId = $1
+      JOIN meetings m ON pm.meetingid = m.id 
+      WHERE pm.userid = $1
     `, [req.user.id]);
 
     let personalMeeting = pmResult.rows[0];
 
     if (personalMeeting) {
+      const pm = normMeeting(personalMeeting);
       return res.json({
         data: {
           id: personalMeeting.id,
-          meetingId: personalMeeting.meetingId,
-          personalMeetingCode: personalMeeting.personalMeetingCode,
+          meetingId: personalMeeting.meetingid ?? personalMeeting.meetingId,
+          personalMeetingCode: personalMeeting.personalmeetingcode ?? personalMeeting.personalMeetingCode,
           title: personalMeeting.title,
-          meetingCode: personalMeeting.meetingCode,
-          hostId: personalMeeting.hostId,
+          meetingCode: pm.meetingCode,
+          hostId: pm.hostId,
         },
       });
     }
@@ -701,11 +726,11 @@ meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Respon
     const now = new Date().toISOString();
     const userName = `${req.user.firstName} ${req.user.lastName}`;
 
-    // Create base meeting
+    // Create base meeting (column names unquoted so PostgreSQL lowercases to match schema)
     await db.query(`
       INSERT INTO meetings (
-        id, title, description, "startTime", duration, "hostName", "hostId", "meetingCode",
-        "waitingRoomMode", "isRecurring", "recurringPattern", "hasWaitingRoom", "isPasswordProtected", "recordingEnabled", "createdAt", "updatedAt"
+        id, title, description, starttime, duration, hostname, hostid, meetingcode,
+        waitingroommode, isrecurring, recurringpattern, haswaitingroom, ispasswordprotected, recordingenabled, createdat, updatedat
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     `, [
       meetingId,
@@ -728,7 +753,7 @@ meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Respon
 
     // Create personal meeting mapping
     await db.query(`
-      INSERT INTO personal_meetings (id, userId, meetingId, personalMeetingCode, createdAt, updatedAt)
+      INSERT INTO personal_meetings (id, userid, meetingid, personalmeetingcode, createdat, updatedat)
       VALUES ($1, $2, $3, $4, $5, $6)
     `, [personalMeetingId, req.user.id, meetingId, personalCode, now, now]);
 
@@ -750,7 +775,7 @@ meetingsRoutes.get('/personal-meeting/current', async (req: Request, res: Respon
 
 meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
     const meeting = meetingResult.rows[0];
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
@@ -758,7 +783,7 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, re
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND meetingId = $2', [req.params.recordingId, meeting.id]);
+    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND meetingid = $2', [req.params.recordingId, meeting.id]);
     const recording = recordingResult.rows[0];
 
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
@@ -766,8 +791,8 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, re
     const now = new Date().toISOString();
     try {
       const egressClient = createEgressClient();
-      if (egressClient && recording.egressId) {
-        await egressClient.stopEgress(recording.egressId);
+      if (egressClient && (recording.egressid ?? recording.egressId)) {
+        await egressClient.stopEgress(recording.egressid ?? recording.egressId);
       }
     } catch {
       // continue to mark recording as completed even if stop fails
@@ -775,11 +800,11 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, re
 
     await db.query(`
       UPDATE meeting_recordings
-      SET status = 'completed', stoppedAt = $1, updatedAt = $2
-      WHERE id = $3 AND meetingId = $4
+      SET status = 'completed', stoppedat = $1, updatedat = $2
+      WHERE id = $3 AND meetingid = $4
     `, [now, now, req.params.recordingId, meeting.id]);
 
-    res.json({ data: { status: 'completed', stoppedAt: now, recordingUrl: recording.recordingUrl } });
+    res.json({ data: { status: 'completed', stoppedAt: now, recordingUrl: recording.recordingurl ?? recording.recordingUrl } });
   } catch (error) {
     console.error('Error stopping recording:', error);
     res.status(500).json({ message: 'Internal server error' });
@@ -788,22 +813,23 @@ meetingsRoutes.post('/:id/recordings/:recordingId/stop', async (req: Request, re
 
 meetingsRoutes.delete('/:id/recordings/:recordingId', async (req: Request, res: Response) => {
   try {
-    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR "meetingCode" = $2', [req.params.id, req.params.id]);
-    const meeting = meetingResult.rows[0];
+    const meetingResult = await db.query('SELECT * FROM meetings WHERE id = $1 OR meetingcode = $2', [req.params.id, req.params.id]);
+    const meeting = normMeeting(meetingResult.rows[0]);
 
     if (!meeting) return res.status(404).json({ message: 'Meeting not found' });
     if (!isHostOrAdmin(meeting, req.user)) {
       return res.status(403).json({ message: 'Not authorized' });
     }
 
-    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND meetingId = $2', [req.params.recordingId, meeting.id]);
+    const recordingResult = await db.query('SELECT * FROM meeting_recordings WHERE id = $1 AND meetingid = $2', [req.params.recordingId, meeting.id]);
     const recording = recordingResult.rows[0];
 
     if (!recording) return res.status(404).json({ message: 'Recording not found' });
 
     // Delete recording file if it exists
-    if (recording.recordingUrl && recording.recordingUrl.startsWith('/recordings/')) {
-      const filename = recording.recordingUrl.replace('/recordings/', '');
+    const recordingUrl = recording.recordingurl ?? recording.recordingUrl;
+    if (recordingUrl && recordingUrl.startsWith('/recordings/')) {
+      const filename = recordingUrl.replace('/recordings/', '');
       const outputDir = process.env.LIVEKIT_EGRESS_OUTPUT_DIR || process.env.RECORDINGS_DIR || path.join(process.cwd(), 'recordings');
       const filepath = path.join(outputDir, filename);
       try {
