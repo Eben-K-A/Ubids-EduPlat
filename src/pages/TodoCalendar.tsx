@@ -32,19 +32,23 @@ export default function TodoCalendar() {
 
   const isLecturer = user?.role === "lecturer" || user?.role === "admin";
 
-  // Build to-do items from assignments and quizzes
+  // Build to-do items from assignments and quizzes (guard against undefined/non-array from context on refresh)
   const todoItems: TodoItem[] = useMemo(() => {
     const items: TodoItem[] = [];
+    const courseList = Array.isArray(courses) ? courses : [];
+    const enrollmentList = Array.isArray(enrollments) ? enrollments : [];
+    const assignmentList = Array.isArray(assignments) ? assignments : [];
+    const quizList = Array.isArray(quizzes) ? quizzes : [];
 
     const myCourseIds = isLecturer
-      ? courses.filter((c) => c.lecturerId === user?.id).map((c) => c.id)
-      : enrollments.filter((e) => e.studentId === user?.id).map((e) => e.courseId);
+      ? courseList.filter((c) => c.lecturerId === user?.id).map((c) => c.id)
+      : enrollmentList.filter((e) => e.studentId === user?.id).map((e) => e.courseId);
 
     // Assignments
-    assignments
+    assignmentList
       .filter((a) => myCourseIds.includes(a.courseId) && a.status === "published")
       .forEach((a) => {
-        const course = courses.find((c) => c.id === a.courseId);
+        const course = courseList.find((c) => c.id === a.courseId);
         const isCompleted = isLecturer ? false : !!getStudentSubmission(a.id);
         items.push({
           id: a.id,
@@ -60,11 +64,12 @@ export default function TodoCalendar() {
       });
 
     // Quizzes
-    quizzes
+    quizList
       .filter((q) => myCourseIds.includes(q.courseId) && q.status === "published")
       .forEach((q) => {
-        const course = courses.find((c) => c.id === q.courseId);
+        const course = courseList.find((c) => c.id === q.courseId);
         const isCompleted = isLecturer ? false : !!getQuizAttempt(q.id);
+        const questionList = Array.isArray(q.questions) ? q.questions : [];
         items.push({
           id: q.id,
           courseId: q.courseId,
@@ -74,7 +79,7 @@ export default function TodoCalendar() {
           type: "quiz",
           dueDate: q.dueDate ? new Date(q.dueDate) : undefined,
           isCompleted,
-          points: q.questions.reduce((sum, qn) => sum + qn.points, 0),
+          points: questionList.reduce((sum, qn) => sum + (qn?.points ?? 0), 0),
         });
       });
 
@@ -86,8 +91,8 @@ export default function TodoCalendar() {
     });
   }, [assignments, quizzes, courses, enrollments, user, isLecturer, getStudentSubmission, getQuizAttempt]);
 
-  const pendingItems = todoItems.filter((t) => !t.isCompleted);
-  const completedItems = todoItems.filter((t) => t.isCompleted);
+  const pendingItems = (todoItems ?? []).filter((t) => !t.isCompleted);
+  const completedItems = (todoItems ?? []).filter((t) => t.isCompleted);
   const overdueItems = pendingItems.filter((t) => t.dueDate && isBefore(t.dueDate, startOfDay(new Date())));
   const todayItems = pendingItems.filter((t) => t.dueDate && isSameDay(t.dueDate, new Date()));
   const upcomingItems = pendingItems.filter(
@@ -96,12 +101,12 @@ export default function TodoCalendar() {
   const noDueDateItems = pendingItems.filter((t) => !t.dueDate);
 
   // Get dates that have items for calendar highlighting
-  const itemDates = todoItems
+  const itemDates = (todoItems ?? [])
     .filter((t) => t.dueDate)
     .map((t) => t.dueDate!);
 
   const selectedDateItems = selectedDate
-    ? todoItems.filter((t) => t.dueDate && isSameDay(t.dueDate, selectedDate))
+    ? (todoItems ?? []).filter((t) => t.dueDate && isSameDay(t.dueDate, selectedDate))
     : [];
 
   const renderTodoItem = (item: TodoItem) => {
